@@ -1,0 +1,12 @@
+[package]
+name = "tbd"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rusqlite = "0.29.0"
+serde = { version = "1.0.160", features = ["derive"] }
+serde_json = "1.0.96"
+youtube_dl = "0.8.0"
