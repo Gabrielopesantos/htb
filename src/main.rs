@@ -1,4 +1,6 @@
+use rusqlite::Connection;
 use serde::Deserialize;
+#[allow(deprecated)]
 use std::{env::home_dir, fs::File};
 
 #[derive(Debug, Deserialize)]
@@ -11,10 +13,12 @@ struct Config {
 impl Config {
     pub fn new() -> Config {
         // NOTE: $HOME/ and ~/ do not work
-        let default_config_path = match home_dir() {
-            Some(path) => path.display().to_string() + "/.config/tbd/config.json",
-            None => panic!("couldn't find home directory"),
-        };
+        // #[allow(deprecated)]
+        // let default_config_path = match home_dir() {
+        //     Some(path) => path.display().to_string() + "/.config/htb/config.json",
+        //     None => panic!("couldn't find home directory"),
+        // };
+        let default_config_path = "./config-example.json";
 
         println!("{}", default_config_path);
 
@@ -25,10 +29,22 @@ impl Config {
     }
 }
 
-fn main() {
-    let config = Config::new();
-    println!("{:?}", config);
+struct SQLiteRepository {
+    conn: rusqlite::Connection,
+}
 
+// Implement a Catalog interface
+impl SQLiteRepository {
+    pub fn new(config: &Config) -> SQLiteRepository {
+        // NOTE: File in given path might not exist, create it before
+        let conn =
+            Connection::open(&config.database_file_path).expect("Failed to establish connection");
+
+        return SQLiteRepository { conn };
+    }
+}
+
+fn _yt_download() {
     let url = "watch?v=";
     // TODO: .extra_arg("-f bestaudio")
     youtube_dl::YoutubeDl::new(url)
@@ -52,4 +68,11 @@ fn main() {
         .expect("Failed to download video");
 
     // info!("successfully downloaded yt clip");
+}
+
+fn main() {
+    let config = Config::new();
+    println!("Config: {:?}", config);
+
+    let _catalog = SQLiteRepository::new(&config);
 }
