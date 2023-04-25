@@ -1,4 +1,34 @@
-use htb::{config, repository};
+mod cli;
+mod config;
+mod repository;
+
+use clap::Parser;
+use cli::{Cli, Command};
+
+fn main() -> anyhow::Result<()> {
+    let config = config::Config::new();
+    println!("Config: {:?}", config);
+
+    let repository = repository::SQLiteRepository::new(&config);
+    // record_and_download_media(repository);
+
+    let command = Cli::parse()
+        .command
+        .ok_or(anyhow::Error::msg("unexpected command used"))?;
+    match &command {
+        Command::Download(args) => {
+            println!("Calling download")
+        }
+        Command::Record(..) => {
+            println!("Calling decord",)
+        }
+        Command::List(..) => {
+            println!("Calling list",)
+        }
+    }
+
+    Ok(())
+}
 
 fn yt_download(watch: &str) -> youtube_dl::YoutubeDlOutput {
     // let url = "watch?v=";
@@ -28,12 +58,4 @@ fn record_and_download_media(repo: repository::SQLiteRepository) {
     let watch = "watch?v=";
     let _yt_dl_output = yt_download(watch);
     repo.insert_media("random_name", watch);
-}
-
-fn main() {
-    let config = config::Config::new();
-    println!("Config: {:?}", config);
-
-    let repository = repository::SQLiteRepository::new(&config);
-    record_and_download_media(repository)
 }
