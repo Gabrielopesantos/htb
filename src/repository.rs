@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS media (
             )
             .expect("Failed to create schema");
     }
-    pub fn insert_media(self, name: &str, link: &str) {
+    pub fn insert_media(&self, name: &str, link: &str) {
         self.conn
             .execute(
                 "INSERT INTO media (name, link) VALUES (?1, ?2)",

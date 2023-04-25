@@ -16,7 +16,14 @@ pub enum Command {
 }
 
 #[derive(Args)]
+#[command(
+    about = "About for Download Subcommand",
+    long_about = "Long about for Download Subcommand"
+)]
 pub struct Download {
+    #[arg(short = 'f', long = "filename")]
+    pub filename: String,
+
     #[arg(short = 'l', long = "link")]
     pub link: String,
 }

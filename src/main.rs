@@ -3,31 +3,54 @@ mod config;
 mod repository;
 
 use clap::Parser;
+use cli::Download;
 use cli::{Cli, Command};
+use config::Config;
+use repository::SQLiteRepository;
+
+struct Api {
+    repository: SQLiteRepository,
+    config: Config,
+}
+
+impl Api {
+    fn new(repository: SQLiteRepository, config: Config) -> Api {
+        Api { repository, config }
+    }
+
+    fn download_media(&self, arguments: &Download) -> anyhow::Result<()> {
+        let _yt_dl_output = yt_download(&arguments.link);
+        self.repository
+            .insert_media(&arguments.filename, &arguments.link);
+
+        Ok(())
+    }
+}
 
 fn main() -> anyhow::Result<()> {
     let config = config::Config::new();
     println!("Config: {:?}", config);
 
     let repository = repository::SQLiteRepository::new(&config);
-    // record_and_download_media(repository);
+    let api = Api::new(repository, config);
 
     let command = Cli::parse()
         .command
         .ok_or(anyhow::Error::msg("unexpected command used"))?;
     match &command {
         Command::Download(args) => {
-            println!("Calling download")
+            println!("Calling download");
+            api.download_media(args)
         }
         Command::Record(..) => {
-            println!("Calling decord",)
+            println!("Calling decord",);
+            Ok(())
         }
         Command::List(..) => {
-            println!("Calling list",)
+            println!("Calling list",);
+            Ok(())
         }
     }
-
-    Ok(())
 }
 
 fn yt_download(watch: &str) -> youtube_dl::YoutubeDlOutput {
@@ -52,10 +75,4 @@ fn yt_download(watch: &str) -> youtube_dl::YoutubeDlOutput {
         .extra_arg("/tmp/downloads/audio-rs")
         .run()
         .expect("Failed to download video")
-}
-
-fn record_and_download_media(repo: repository::SQLiteRepository) {
-    let watch = "watch?v=";
-    let _yt_dl_output = yt_download(watch);
-    repo.insert_media("random_name", watch);
 }
