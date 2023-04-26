@@ -24,8 +24,8 @@ pub struct Download {
     #[arg(short = 'f', long = "filename")]
     pub filename: String,
 
-    #[arg(short = 'l', long = "link")]
-    pub link: String,
+    #[arg(short = 'u', long = "url")]
+    pub url: String,
 }
 
 #[derive(Args)]

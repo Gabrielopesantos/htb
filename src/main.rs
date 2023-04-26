@@ -7,6 +7,7 @@ use cli::Download;
 use cli::{Cli, Command};
 use config::Config;
 use repository::SQLiteRepository;
+use youtube_dl::YoutubeDlOutput;
 
 struct Api {
     repository: SQLiteRepository,
@@ -19,9 +20,15 @@ impl Api {
     }
 
     fn download_media(&self, arguments: &Download) -> anyhow::Result<()> {
-        let _yt_dl_output = yt_download(&arguments.link);
+        let yt_dl_output = yt_download(&arguments.url)?;
+        let video_content = yt_dl_output.into_single_video().ok_or(anyhow::Error::msg(
+            "If download was successful, should have acess to single video",
+        ))?;
+
+        println!("{:?}", video_content.title);
+
         self.repository
-            .insert_media(&arguments.filename, &arguments.link);
+            .insert_media(&arguments.filename, &arguments.url);
 
         Ok(())
     }
@@ -53,26 +60,24 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn yt_download(watch: &str) -> youtube_dl::YoutubeDlOutput {
-    // let url = "watch?v=";
-    // TODO: .extra_arg("-f bestaudio")
-    youtube_dl::YoutubeDl::new(watch)
+fn yt_download(url: &str) -> Result<YoutubeDlOutput, youtube_dl::Error> {
+    // --default-search option doesn't seem to be working properly, when used
+    // `into_single_video` returns None. Going to be expecting full URLs.
+    youtube_dl::YoutubeDl::new(url)
         .youtube_dl_path("yt-dlp")
-        // .extract_audio(true)
         .download(true)
-        // Don't allow downloading playlists
+        .extract_audio(true)
         .extra_arg("--no-playlist")
-        // Don't continue a paused download, always restart
         .extra_arg("--no-continue")
-        .extra_arg("--default-search")
-        .extra_arg("ytsearch")
+        // .extra_arg("--default-search")
+        // .extra_arg("auto") // ytsearch
+        .extra_arg("-f bestaudio")
         .extra_arg("--downloader")
         .extra_arg("ffmpeg")
-        .extra_arg("--extract-audio")
         .extra_arg("--audio-format")
         .extra_arg("mp3")
+        .extra_arg("--no-keep-video")
         .extra_arg("-o")
-        .extra_arg("/tmp/downloads/audio-rs")
+        .extra_arg("/tmp/downloads/%(title)s.%(ext)s")
         .run()
-        .expect("Failed to download video")
 }
