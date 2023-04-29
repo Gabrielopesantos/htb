@@ -28,6 +28,7 @@ impl SQLiteRepository {
 CREATE TABLE IF NOT EXISTS media (
     id INTEGER PRIMARY KEY ASC,
     name TEXT NOT NULL,
+    filename TEXT NOT NULL,
     url TEXT NOT NULL,
     tags TEXT,
     inserted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -36,9 +37,12 @@ CREATE TABLE IF NOT EXISTS media (
             )
             .expect("Failed to create schema");
     }
-    pub fn insert_media(&self, name: &str, url: &str) {
+    pub fn insert_media(&self, name: &str, filename: &str, url: &str, tags: &str) {
         self.conn
-            .execute("INSERT INTO media (name, url) VALUES (?1, ?2)", [name, url])
+            .execute(
+                "INSERT INTO media (name, filename, url, tags) VALUES (?1, ?2, ?3, ?4)",
+                [name, filename, url, tags],
+            )
             .expect("failed to insert record");
     }
 }

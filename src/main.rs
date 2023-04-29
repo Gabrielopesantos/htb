@@ -20,15 +20,17 @@ impl Api {
     }
 
     fn download_media(&self, arguments: &Download) -> anyhow::Result<()> {
-        let yt_dl_output = yt_download(&arguments.url)?;
+        let yt_dl_output = yt_download(&arguments.url, arguments.filename.as_ref())?;
         let video_content = yt_dl_output.into_single_video().ok_or(anyhow::Error::msg(
             "If download was successful, should have acess to single video",
         ))?;
 
-        println!("{:?}", video_content.title);
+        let filename = arguments.filename.as_ref().unwrap_or(&video_content.title);
+        let empty_tags = String::from("");
+        let tags = arguments.tags.as_ref().unwrap_or(&empty_tags);
 
         self.repository
-            .insert_media(&arguments.filename, &arguments.url);
+            .insert_media(&video_content.title, filename, &arguments.url, tags);
 
         Ok(())
     }
@@ -45,10 +47,7 @@ fn main() -> anyhow::Result<()> {
         .command
         .ok_or(anyhow::Error::msg("unexpected command used"))?;
     match &command {
-        Command::Download(args) => {
-            println!("Calling download");
-            api.download_media(args)
-        }
+        Command::Download(args) => api.download_media(args),
         Command::Record(..) => {
             println!("Calling decord",);
             Ok(())
@@ -60,9 +59,12 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn yt_download(url: &str) -> Result<YoutubeDlOutput, youtube_dl::Error> {
+fn yt_download(url: &str, filename: Option<&String>) -> Result<YoutubeDlOutput, youtube_dl::Error> {
     // --default-search option doesn't seem to be working properly, when used
     // `into_single_video` returns None. Going to be expecting full URLs.
+
+    let media_name = String::from("%(title)s");
+    let filename = filename.unwrap_or(&media_name);
     youtube_dl::YoutubeDl::new(url)
         .youtube_dl_path("yt-dlp")
         .download(true)
@@ -78,6 +80,6 @@ fn yt_download(url: &str) -> Result<YoutubeDlOutput, youtube_dl::Error> {
         .extra_arg("mp3")
         .extra_arg("--no-keep-video")
         .extra_arg("-o")
-        .extra_arg("/tmp/downloads/%(title)s.%(ext)s")
+        .extra_arg(format!("/tmp/downloads/{}.%(ext)s", filename))
         .run()
 }
