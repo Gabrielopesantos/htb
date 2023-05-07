@@ -11,8 +11,7 @@ pub struct SQLiteRepository {
 impl SQLiteRepository {
     pub fn new(config: &config::Config) -> SQLiteRepository {
         // NOTE: File in given path might not exist, create it before
-        let conn =
-            Connection::open(&config.database_file_path).expect("Failed to establish connection");
+        let conn = Connection::open(&config.database_file_path).expect("Failed to establish connection");
 
         let repo = SQLiteRepository { conn };
 
@@ -29,6 +28,7 @@ CREATE TABLE IF NOT EXISTS media (
     id INTEGER PRIMARY KEY ASC,
     name TEXT NOT NULL,
     filename TEXT NOT NULL,
+    directory TEXT NOT NULL,
     url TEXT NOT NULL,
     tags TEXT,
     inserted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -37,11 +37,11 @@ CREATE TABLE IF NOT EXISTS media (
             )
             .expect("Failed to create schema");
     }
-    pub fn insert_media(&self, name: &str, filename: &str, url: &str, tags: &str) {
+    pub fn insert_media(&self, name: &str, filename: &str, directory: &str, url: &str, tags: &str) {
         self.conn
             .execute(
-                "INSERT INTO media (name, filename, url, tags) VALUES (?1, ?2, ?3, ?4)",
-                [name, filename, url, tags],
+                "INSERT INTO media (name, filename, directory, url, tags) VALUES (?1, ?2, ?3, ?4, ?5)",
+                [name, filename, directory, url, tags],
             )
             .expect("failed to insert record");
     }

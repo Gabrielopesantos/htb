@@ -22,18 +22,16 @@ pub enum Command {
     long_about = "Long about for Download Subcommand"
 )]
 pub struct Download {
+    #[arg(short = 'd', long = "directory", required = false, help = "")]
+    pub directory: Option<String>,
+
     #[arg(short = 'f', long = "filename", required = false)]
     pub filename: Option<String>,
 
     #[arg(short = 'u', long = "url")]
     pub url: String,
 
-    #[arg(
-        short = 't',
-        long = "tags",
-        required = false,
-        help = "Comma separated key values"
-    )]
+    #[arg(short = 't', long = "tags", required = false, help = "Comma separated key values")]
     pub tags: Option<String>,
 }
 

@@ -1,4 +1,4 @@
 {
     "databaseFilePath": "catalog.db",
-    "catalogPath": ""
+    "catalogPath": "/tmp/downloads"
 }
