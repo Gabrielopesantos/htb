@@ -12,6 +12,7 @@ pub struct Config {
 impl Config {
     pub fn new() -> Config {
         // NOTE: $HOME/ and ~/ do not work
+        // NOTE: It should actually be $XDG_CONFIG_HOME instead of $HOME/.config
         // #[allow(deprecated)]
         // let default_config_path = match home_dir() {
         //     Some(path) => path.display().to_string() + "/.config/htb/config.json",

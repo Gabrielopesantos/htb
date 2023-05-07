@@ -37,23 +37,31 @@ impl Api {
 }
 
 fn main() -> anyhow::Result<()> {
-    let config = config::Config::new();
-    println!("Config: {:?}", config);
+    // initialize logger
+    env_logger::init();
 
+    // read config
+    let config = config::Config::new();
+    log::debug!("Config read: {:?}", config);
+
+    // create repo
     let repository = repository::SQLiteRepository::new(&config);
+
+    // create instance of API
     let api = Api::new(repository, config);
 
-    let command = Cli::parse()
-        .command
-        .ok_or(anyhow::Error::msg("unexpected command used"))?;
+    let command = Cli::parse().command.ok_or({
+        log::error!("invalid command provided");
+        anyhow::Error::msg("invalid command provided")
+    })?;
     match &command {
         Command::Download(args) => api.download_media(args),
         Command::Record(..) => {
-            println!("Calling decord",);
+            log::info!("Calling decord",);
             Ok(())
         }
         Command::List(..) => {
-            println!("Calling list",);
+            log::info!("Calling list",);
             Ok(())
         }
     }
