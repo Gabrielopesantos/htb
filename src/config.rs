@@ -22,8 +22,10 @@ impl Config {
 
         println!("{}", default_config_path);
 
-        let file = File::open(default_config_path).expect("could not find the configuration file");
-        let config = serde_json::from_reader(file).expect("JSON isn't well-formatted");
+        let file = File::open(default_config_path)
+            .expect("could not find the configuration file");
+        let config =
+            serde_json::from_reader(file).expect("JSON isn't well-formatted");
 
         return config;
     }

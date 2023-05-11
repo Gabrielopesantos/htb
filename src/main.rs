@@ -1,45 +1,90 @@
 mod cli;
 mod config;
+mod media_downloader;
 mod repository;
 
 use clap::Parser;
 use cli::Download;
 use cli::{Cli, Command};
 use config::Config;
+use log::info;
+use media_downloader::{MediaDownloader, YtDlp};
 use repository::SQLiteRepository;
-use std::path::PathBuf;
-use youtube_dl::YoutubeDlOutput;
 
-struct Api {
+struct Api<T> {
+    media_downl: T,
     repository: SQLiteRepository,
     config: Config,
 }
 
-impl Api {
-    fn new(repository: SQLiteRepository, config: Config) -> Api {
-        Api { repository, config }
+impl<T: MediaDownloader> Api<T> {
+    fn new(
+        media_downl: T,
+        repository: SQLiteRepository,
+        config: Config,
+    ) -> Self {
+        Api {
+            media_downl,
+            repository,
+            config,
+        }
     }
 
     fn download_media(&self, arguments: &Download) -> anyhow::Result<()> {
-        let yt_dl_output = yt_download(
-            &arguments.url,
+        let directory = arguments
+            .directory
+            .as_ref()
+            .unwrap_or(&"".to_string())
+            .to_owned();
+
+        let media_download_output = self.media_downl.download(
+            arguments.url.as_ref(),
             &self.config.catalog_path,
-            arguments.directory.as_ref(),
-            arguments.filename.as_ref(),
+            &directory,
+            arguments.filename.as_deref(),
         )?;
-        let media_content = yt_dl_output.into_single_video().ok_or(anyhow::Error::msg(
-            "If download was successful, should have acess to single media",
-        ))?;
 
-        let filename = arguments.filename.as_ref().unwrap_or(&media_content.title);
-        let directory = arguments.directory.as_ref().unwrap_or(&"".to_string()).to_owned();
-        let tags = arguments.tags.as_ref().unwrap_or(&"".to_string()).to_owned();
+        let media_metadata =
+            media_download_output
+                .into_single_video()
+                .ok_or(anyhow::Error::msg(
+                "If download was successful, should have acess to single media",
+            ))?;
+        let tags = arguments
+            .tags
+            .as_ref()
+            .unwrap_or(&"".to_string())
+            .to_owned(); // FIXME: Is this the best way of having a default value for tags?
 
-        self.repository
-            .insert_media(&media_content.title, filename, &directory, &arguments.url, &tags);
+        let filename =
+            arguments.filename.as_ref().unwrap_or(&media_metadata.title);
+        let directory = arguments
+            .directory
+            .as_ref()
+            .unwrap_or(&"".to_string())
+            .to_owned();
+
+        self.repository.insert_media(
+            &media_metadata.title,
+            &filename,
+            &directory,
+            &arguments.url,
+            &tags,
+        );
 
         Ok(())
     }
+
+    // fn record_media(&self, arguments: &Download) -> anyhow::Result<()> {
+    // let filename = arguments.filename.as_ref().unwrap_or(&media_content.title);
+    // let directory = arguments.directory.as_ref().unwrap_or(&"".to_string()).to_owned();
+    // let tags = arguments.tags.as_ref().unwrap_or(&"".to_string()).to_owned();
+    //
+    // self.repository
+    //     .insert_media(&media_content.title, filename, &directory, &arguments.url, &tags);
+    //
+    // Ok(())
+    // }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -54,7 +99,7 @@ fn main() -> anyhow::Result<()> {
     let repository = repository::SQLiteRepository::new(&config);
 
     // create instance of API
-    let api = Api::new(repository, config);
+    let api = Api::new(YtDlp, repository, config);
 
     // ??
     let command = Cli::parse().command.ok_or_else(|| {
@@ -73,43 +118,5 @@ fn main() -> anyhow::Result<()> {
         }
     }
 }
-
-fn yt_download(
-    url: &str,
-    base_path: &PathBuf,
-    directory: Option<&String>,
-    filename: Option<&String>,
-) -> Result<YoutubeDlOutput, youtube_dl::Error> {
-    // --default-search option doesn't seem to be working properly, when used
-    // `into_single_video` returns None. Going to be expecting full URLs.
-
-    let filename = filename.unwrap_or(&String::from("%(title)s")).to_owned();
-    let directory = directory.unwrap_or(&String::from("")).to_owned();
-    let output_path = base_path
-        .clone()
-        .join(directory)
-        .join(filename)
-        .to_str()
-        .expect("Path is always valid")
-        .to_owned();
-
-    log::info!("Output path: {}", output_path);
-
-    youtube_dl::YoutubeDl::new(url)
-        .youtube_dl_path("yt-dlp")
-        .download(true)
-        .extract_audio(true)
-        .extra_arg("--no-playlist")
-        .extra_arg("--no-continue")
-        // .extra_arg("--default-search")
-        // .extra_arg("auto") // ytsearch
-        .extra_arg("-f bestaudio")
-        .extra_arg("--downloader")
-        .extra_arg("ffmpeg")
-        .extra_arg("--audio-format")
-        .extra_arg("mp3")
-        .extra_arg("--no-keep-video")
-        .extra_arg("-o")
-        .extra_arg(output_path)
-        .run()
-}
+// 1. no method named `download` found for type parameter `T` in the current scope
+//    found the following associated functions; to be used as methods, functions must have a `self` parameter

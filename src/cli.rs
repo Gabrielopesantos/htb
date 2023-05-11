@@ -11,7 +11,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Command {
     Download(Download),
-    Record(Record),
+    Record(Download),
     List(List),
     // Diff(Diff),
 }

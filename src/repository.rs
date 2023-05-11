@@ -1,4 +1,5 @@
 use crate::config;
+use log::info;
 use rusqlite::Connection;
 
 pub struct SQLiteRepository {
@@ -11,13 +12,12 @@ pub struct SQLiteRepository {
 impl SQLiteRepository {
     pub fn new(config: &config::Config) -> SQLiteRepository {
         // NOTE: File in given path might not exist, create it before
-        let conn = Connection::open(&config.database_file_path).expect("Failed to establish connection");
-
+        let conn = Connection::open(&config.database_file_path)
+            .expect("Failed to establish connection");
         let repo = SQLiteRepository { conn };
-
         repo.create_schema();
 
-        return repo;
+        repo
     }
 
     fn create_schema(&self) {
@@ -35,14 +35,21 @@ CREATE TABLE IF NOT EXISTS media (
 )",
                 (),
             )
-            .expect("Failed to create schema");
+            .expect("Failed to create schema"); // FIXME: `expect()`
     }
-    pub fn insert_media(&self, name: &str, filename: &str, directory: &str, url: &str, tags: &str) {
+    pub fn insert_media(
+        &self,
+        name: &str,
+        filename: &str,
+        directory: &str,
+        url: &str,
+        tags: &str,
+    ) {
         self.conn
             .execute(
                 "INSERT INTO media (name, filename, directory, url, tags) VALUES (?1, ?2, ?3, ?4, ?5)",
                 [name, filename, directory, url, tags],
             )
-            .expect("failed to insert record");
+            .expect("failed to insert record"); // FIX_ME: `expect()`
     }
 }
