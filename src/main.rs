@@ -7,7 +7,6 @@ use clap::Parser;
 use cli::Download;
 use cli::{Cli, Command};
 use config::Config;
-use log::info;
 use media_downloader::{MediaDownloader, YtDlp};
 use repository::SQLiteRepository;
 
@@ -75,16 +74,44 @@ impl<T: MediaDownloader> Api<T> {
         Ok(())
     }
 
-    // fn record_media(&self, arguments: &Download) -> anyhow::Result<()> {
-    // let filename = arguments.filename.as_ref().unwrap_or(&media_content.title);
-    // let directory = arguments.directory.as_ref().unwrap_or(&"".to_string()).to_owned();
-    // let tags = arguments.tags.as_ref().unwrap_or(&"".to_string()).to_owned();
-    //
-    // self.repository
-    //     .insert_media(&media_content.title, filename, &directory, &arguments.url, &tags);
-    //
-    // Ok(())
-    // }
+    fn record_media(&self, arguments: &Download) -> anyhow::Result<()> {
+        let media_download_output = self
+            .media_downl
+            .get_media_metadata(arguments.url.as_ref())?;
+
+        // This is exactly the same as what we have above
+        let media_metadata =
+            media_download_output
+                .into_single_video()
+                .ok_or(anyhow::Error::msg(
+                "If download was successful, should have acess to single media",
+            ))?;
+
+        let tags = arguments
+            .tags
+            .as_ref()
+            .unwrap_or(&"".to_string())
+            .to_owned(); // FIXME: Is this the best way of having a default value for tags?
+
+        let filename =
+            arguments.filename.as_ref().unwrap_or(&media_metadata.title);
+        let directory = arguments
+            .directory
+            .as_ref()
+            .unwrap_or(&"".to_string())
+            .to_owned();
+
+        self.repository.insert_media(
+            &media_metadata.title,
+            &filename,
+            &directory,
+            &arguments.url,
+            &tags,
+        );
+        // This is exactly the same as what we have above
+
+        Ok(())
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -108,10 +135,7 @@ fn main() -> anyhow::Result<()> {
     })?;
     match &command {
         Command::Download(args) => api.download_media(args),
-        Command::Record(..) => {
-            log::info!("Calling decord",);
-            Ok(())
-        }
+        Command::Record(args) => api.record_media(args),
         Command::List(..) => {
             log::info!("Calling list",);
             Ok(())

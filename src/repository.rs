@@ -1,5 +1,4 @@
 use crate::config;
-use log::info;
 use rusqlite::Connection;
 
 pub struct SQLiteRepository {

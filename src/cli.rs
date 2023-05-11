@@ -11,7 +11,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Command {
     Download(Download),
-    Record(Download),
+    Record(Download), // Uses same arguments as `Download`
     List(List),
     // Diff(Diff),
 }
@@ -31,7 +31,12 @@ pub struct Download {
     #[arg(short = 'u', long = "url")]
     pub url: String,
 
-    #[arg(short = 't', long = "tags", required = false, help = "Comma separated key values")]
+    #[arg(
+        short = 't',
+        long = "tags",
+        required = false,
+        help = "Comma separated key values"
+    )]
     pub tags: Option<String>,
 }
 

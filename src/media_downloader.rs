@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use youtube_dl::{YoutubeDl, YoutubeDlOutput};
 
+// NOTE: There's no point in using this trait is returns are specific to `yt-dlp`
+// Maybe handle `Result` in each method in return something standard?
 pub trait MediaDownloader {
+    // NOTE: Why this needs to be a method cannot be an associated function?
     fn download(
         &self,
         url: &str,
@@ -10,6 +13,18 @@ pub trait MediaDownloader {
         library: &str,
         filename: Option<&str>,
     ) -> Result<YoutubeDlOutput, youtube_dl::Error>;
+
+    // NOTE: Only a few attributes are supported
+    fn get_media_metadata(
+        &self,
+        url: &str,
+    ) -> Result<YoutubeDlOutput, youtube_dl::Error> {
+        YoutubeDl::new(url)
+            .youtube_dl_path("yt-dlp")
+            .download(false)
+            .extra_arg("--no-playlist")
+            .run()
+    }
 }
 
 pub struct YtDlp;
