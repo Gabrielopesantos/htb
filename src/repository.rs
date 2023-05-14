@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS media (
             )
             .expect("Failed to create schema"); // FIXME: `expect()`
     }
-    pub fn insert_media(
+    pub fn insert(
         &self,
         name: &str,
         filename: &str,
@@ -49,6 +49,24 @@ CREATE TABLE IF NOT EXISTS media (
                 "INSERT INTO media (name, filename, directory, url, tags) VALUES (?1, ?2, ?3, ?4, ?5)",
                 [name, filename, directory, url, tags],
             )
-            .expect("failed to insert record"); // FIX_ME: `expect()`
+            .expect("failed to insert record"); // FIXME: `expect()`
+    }
+
+    pub fn query(
+        &self,
+        _directory: &str,
+        _tags: &str,
+    ) -> anyhow::Result<Vec<String>> {
+        let query = "SELECT name FROM media";
+        let mut stmt = self.conn.prepare(query)?;
+
+        let rows = stmt.query_map([], |row| Ok(row.get(0).unwrap()))?; // FIXME: `unwrap()`
+
+        let mut catalog_items = Vec::new();
+        for row in rows {
+            catalog_items.push(row?);
+        }
+
+        Ok(catalog_items)
     }
 }

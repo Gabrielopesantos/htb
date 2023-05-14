@@ -40,11 +40,24 @@ pub struct Download {
     pub tags: Option<String>,
 }
 
+// NOTE: Not needed for now (or ever)
 #[derive(Args)]
 struct Record;
 
+// NOTE: List, Get or Filter. Filters can be provided so it makes sense to be filter?
 #[derive(Args)]
-struct List;
+pub struct List {
+    #[arg(short = 'd', long = "directory", required = false)]
+    pub directory: Option<String>,
+
+    #[arg(
+        short = 't',
+        long = "tags",
+        required = false,
+        help = "Comma separated key values"
+    )]
+    pub tags: Option<String>,
+}
 
 #[derive(Args)]
 struct Diff;

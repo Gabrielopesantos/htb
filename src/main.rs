@@ -4,8 +4,8 @@ mod media_downloader;
 mod repository;
 
 use clap::Parser;
-use cli::Download;
 use cli::{Cli, Command};
+use cli::{Download, List};
 use config::Config;
 use media_downloader::{MediaDownloader, YtDlp};
 use repository::SQLiteRepository;
@@ -63,7 +63,7 @@ impl<T: MediaDownloader> Api<T> {
             .unwrap_or(&"".to_string())
             .to_owned();
 
-        self.repository.insert_media(
+        self.repository.insert(
             &media_metadata.title,
             &filename,
             &directory,
@@ -101,7 +101,7 @@ impl<T: MediaDownloader> Api<T> {
             .unwrap_or(&"".to_string())
             .to_owned();
 
-        self.repository.insert_media(
+        self.repository.insert(
             &media_metadata.title,
             &filename,
             &directory,
@@ -109,6 +109,16 @@ impl<T: MediaDownloader> Api<T> {
             &tags,
         );
         // This is exactly the same as what we have above
+
+        Ok(())
+    }
+
+    fn list_media(&self, _args: &List) -> anyhow::Result<()> {
+        if let Ok(catalog_items) = self.repository.query("", "") {
+            for item in catalog_items {
+                println!("{}", item);
+            }
+        }
 
         Ok(())
     }
@@ -120,7 +130,6 @@ fn main() -> anyhow::Result<()> {
 
     // read config
     let config = config::Config::new();
-    log::debug!("Config read: {:?}", config);
 
     // create repo
     let repository = repository::SQLiteRepository::new(&config);
@@ -136,11 +145,6 @@ fn main() -> anyhow::Result<()> {
     match &command {
         Command::Download(args) => api.download_media(args),
         Command::Record(args) => api.record_media(args),
-        Command::List(..) => {
-            log::info!("Calling list",);
-            Ok(())
-        }
+        Command::List(args) => api.list_media(args),
     }
 }
-// 1. no method named `download` found for type parameter `T` in the current scope
-//    found the following associated functions; to be used as methods, functions must have a `self` parameter
