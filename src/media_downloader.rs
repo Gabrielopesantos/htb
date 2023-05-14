@@ -4,6 +4,7 @@ use youtube_dl::{YoutubeDl, YoutubeDlOutput};
 
 // NOTE: There's no point in using this trait is returns are specific to `yt-dlp`
 // Maybe handle `Result` in each method in return something standard?
+// NOTE: Name doesn't convey exactly the function of this structure
 pub trait MediaDownloader {
     // NOTE: Why this needs to be a method cannot be an associated function?
     fn download(

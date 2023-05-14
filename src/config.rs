@@ -20,8 +20,6 @@ impl Config {
         // };
         let default_config_path = "./config-example.json";
 
-        println!("{}", default_config_path);
-
         let file = File::open(default_config_path)
             .expect("could not find the configuration file");
         let config =

@@ -7,6 +7,7 @@ use clap::Parser;
 use cli::{Cli, Command};
 use cli::{Download, List};
 use config::Config;
+use log::debug;
 use media_downloader::{MediaDownloader, YtDlp};
 use repository::SQLiteRepository;
 
@@ -113,11 +114,17 @@ impl<T: MediaDownloader> Api<T> {
         Ok(())
     }
 
-    fn list_media(&self, _args: &List) -> anyhow::Result<()> {
-        if let Ok(catalog_items) = self.repository.query("", "") {
+    fn list_catalog(&self, args: &List) -> anyhow::Result<()> {
+        let catalog_items = self.repository.query(
+            args.directory.as_deref().unwrap_or_default(),
+            args.tags.as_deref().unwrap_or_default(),
+        )?;
+        if catalog_items.len() > 0 {
             for item in catalog_items {
                 println!("{}", item);
             }
+        } else {
+            println!("No items to list");
         }
 
         Ok(())
@@ -130,6 +137,7 @@ fn main() -> anyhow::Result<()> {
 
     // read config
     let config = config::Config::new();
+    debug!("{:?}", config);
 
     // create repo
     let repository = repository::SQLiteRepository::new(&config);
@@ -145,6 +153,6 @@ fn main() -> anyhow::Result<()> {
     match &command {
         Command::Download(args) => api.download_media(args),
         Command::Record(args) => api.record_media(args),
-        Command::List(args) => api.list_media(args),
+        Command::List(args) => api.list_catalog(args),
     }
 }
