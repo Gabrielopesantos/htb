@@ -31,11 +31,7 @@ impl<T: MediaDownloader> Api<T> {
     }
 
     fn download_media(&self, arguments: &Download) -> anyhow::Result<()> {
-        let directory = arguments
-            .directory
-            .as_ref()
-            .unwrap_or(&"".to_string())
-            .to_owned();
+        let directory = arguments.directory.as_deref().unwrap_or_default();
 
         let media_download_output = self.media_downl.download(
             arguments.url.as_ref(),
@@ -50,19 +46,11 @@ impl<T: MediaDownloader> Api<T> {
                 .ok_or(anyhow::Error::msg(
                 "If download was successful, should have acess to single media",
             ))?;
-        let tags = arguments
-            .tags
-            .as_ref()
-            .unwrap_or(&"".to_string())
-            .to_owned(); // FIXME: Is this the best way of having a default value for tags?
+        let tags = arguments.tags.as_deref().unwrap_or_default();
 
         let filename =
             arguments.filename.as_ref().unwrap_or(&media_metadata.title);
-        let directory = arguments
-            .directory
-            .as_ref()
-            .unwrap_or(&"".to_string())
-            .to_owned();
+        let directory = arguments.directory.as_deref().unwrap_or_default();
 
         self.repository.insert(
             &media_metadata.title,
@@ -88,19 +76,11 @@ impl<T: MediaDownloader> Api<T> {
                 "If download was successful, should have acess to single media",
             ))?;
 
-        let tags = arguments
-            .tags
-            .as_ref()
-            .unwrap_or(&"".to_string())
-            .to_owned(); // FIXME: Is this the best way of having a default value for tags?
+        let tags = arguments.tags.as_deref().unwrap_or_default();
 
         let filename =
             arguments.filename.as_ref().unwrap_or(&media_metadata.title);
-        let directory = arguments
-            .directory
-            .as_ref()
-            .unwrap_or(&"".to_string())
-            .to_owned();
+        let directory = arguments.directory.as_deref().unwrap_or_default();
 
         self.repository.insert(
             &media_metadata.title,
