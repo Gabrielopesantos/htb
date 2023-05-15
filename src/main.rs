@@ -1,13 +1,17 @@
 mod cli;
 mod config;
+mod media;
 mod media_downloader;
 mod repository;
+
+use std::fs;
 
 use clap::Parser;
 use cli::{Cli, Command};
 use cli::{Download, List};
 use config::Config;
 use log::debug;
+use media::Media;
 use media_downloader::{MediaDownloader, YtDlp};
 use repository::SQLiteRepository;
 
@@ -101,7 +105,7 @@ impl<T: MediaDownloader> Api<T> {
         )?;
         if catalog_items.len() > 0 {
             for item in catalog_items {
-                println!("{}", item);
+                println!("{}", item.info());
             }
         } else {
             println!("No items to list");

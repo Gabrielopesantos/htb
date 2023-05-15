@@ -1,4 +1,4 @@
-use crate::config;
+use crate::{config, media::Media};
 use rusqlite::Connection;
 
 pub struct SQLiteRepository {
@@ -56,16 +56,25 @@ CREATE TABLE IF NOT EXISTS media (
         &self,
         directory: &str,
         _tags: &str, // NOTE: tags are still not supported
-    ) -> anyhow::Result<Vec<String>> {
+    ) -> anyhow::Result<Vec<Media>> {
         // NOTE: Taking advantage of short circuirt evaluation to return everything
         // when directory has the default value
-        let query = "SELECT name FROM media WHERE directory = :directory OR :directory = ''";
+        let query = "SELECT name, filename, directory, url, tags FROM media WHERE directory = :directory OR :directory = ''";
         let mut stmt = self.conn.prepare(query)?;
 
         let rows = stmt.query_map(
             &[(":directory", directory), (":directory", directory)],
-            |row| Ok(row.get(0).unwrap()),
-        )?; // FIXME: `unwrap()`
+            |row| {
+                // NOTE: Maybe have a `new` instead?
+                Ok(Media {
+                    name: row.get(0)?,
+                    filename: row.get(1)?,
+                    directory: row.get(2)?,
+                    url: row.get(3)?,
+                    tags: row.get(4)?,
+                })
+            },
+        )?;
 
         let mut catalog_items = Vec::new();
         for row in rows {
