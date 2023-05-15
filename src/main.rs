@@ -4,14 +4,13 @@ mod media;
 mod media_downloader;
 mod repository;
 
-use std::fs;
+use std::path::Path;
 
 use clap::Parser;
 use cli::{Cli, Command};
 use cli::{Download, List};
 use config::Config;
 use log::debug;
-use media::Media;
 use media_downloader::{MediaDownloader, YtDlp};
 use repository::SQLiteRepository;
 
@@ -113,6 +112,27 @@ impl<T: MediaDownloader> Api<T> {
 
         Ok(())
     }
+
+    // NOTE: Let's go with a sequential approach for now
+    // Too still if downloads aren't concurrent
+    fn diff(&self) -> anyhow::Result<()> {
+        let catalog_items = self.repository.query("", "")?;
+        for media in catalog_items {
+            let media_file_path = Path::new(&self.config.catalog_path)
+                .join(&media.directory)
+                .join(&media.filename);
+            if !media_file_path.exists() {
+                self.media_downl.download(
+                    &media.url,
+                    &self.config.catalog_path,
+                    &media.directory,
+                    Some(&media.filename),
+                )?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -138,5 +158,6 @@ fn main() -> anyhow::Result<()> {
         Command::Download(args) => api.download_media(args),
         Command::Record(args) => api.record_media(args),
         Command::List(args) => api.list_catalog(args),
+        Command::Diff(_) => api.diff(),
     }
 }

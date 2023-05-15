@@ -13,7 +13,7 @@ pub enum Command {
     Download(Download),
     Record(Download), // Uses same arguments as `Download`
     List(List),
-    // Diff(Diff),
+    Diff(Diff),
 }
 
 #[derive(Args)]
@@ -60,4 +60,4 @@ pub struct List {
 }
 
 #[derive(Args)]
-struct Diff;
+pub struct Diff;
