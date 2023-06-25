@@ -11,9 +11,20 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Command {
     Download(Download),
-    Record(Download), // Uses same arguments as `Download`
-    List(List),
-    Diff(Diff),
+    Record(Download),
+    List {
+        #[arg(short = 'd', long = "directory", required = false)]
+        directory: Option<String>,
+
+        #[arg(
+            short = 't',
+            long = "tags",
+            required = false,
+            help = "Comma separated key values"
+        )]
+        tags: Option<String>,
+    },
+    Diff,
 }
 
 #[derive(Args)]
@@ -39,25 +50,3 @@ pub struct Download {
     )]
     pub tags: Option<String>,
 }
-
-// NOTE: Not needed for now (or ever)
-#[derive(Args)]
-struct Record;
-
-// NOTE: List, Get or Filter. Filters can be provided so it makes sense to be filter?
-#[derive(Args)]
-pub struct List {
-    #[arg(short = 'd', long = "directory", required = false)]
-    pub directory: Option<String>,
-
-    #[arg(
-        short = 't',
-        long = "tags",
-        required = false,
-        help = "Comma separated key values"
-    )]
-    pub tags: Option<String>,
-}
-
-#[derive(Args)]
-pub struct Diff;

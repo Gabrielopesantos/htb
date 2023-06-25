@@ -7,8 +7,8 @@ mod repository;
 use std::path::Path;
 
 use clap::Parser;
+use cli::Download;
 use cli::{Cli, Command};
-use cli::{Download, List};
 use config::Config;
 use log::debug;
 use media_downloader::{MediaDownloader, YtDlp};
@@ -97,10 +97,14 @@ impl<T: MediaDownloader> Api<T> {
         Ok(())
     }
 
-    fn list_catalog(&self, args: &List) -> anyhow::Result<()> {
+    fn list_catalog(
+        &self,
+        directory: &Option<String>,
+        tags: &Option<String>,
+    ) -> anyhow::Result<()> {
         let catalog_items = self.repository.query(
-            args.directory.as_deref().unwrap_or_default(),
-            args.tags.as_deref().unwrap_or_default(),
+            directory.as_deref().unwrap_or_default(),
+            tags.as_deref().unwrap_or_default(),
         )?;
         if catalog_items.len() > 0 {
             for item in catalog_items {
@@ -157,7 +161,7 @@ fn main() -> anyhow::Result<()> {
     match &command {
         Command::Download(args) => api.download_media(args),
         Command::Record(args) => api.record_media(args),
-        Command::List(args) => api.list_catalog(args),
-        Command::Diff(_) => api.diff(),
+        Command::List { directory, tags } => api.list_catalog(directory, tags),
+        Command::Diff => api.diff(),
     }
 }
