@@ -2,7 +2,7 @@ use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(author, version)]
-#[command(about = "About", long_about = "Long about")]
+#[command(about = "Download and keep track of audio content")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -10,8 +10,11 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    Download(Download),
-    Record(Download),
+    #[command(about = "Download and record audio content")]
+    Download(DownloadArgs),
+    #[command(about = "Record audio content")]
+    Record(DownloadArgs),
+    #[command(about = "List all media in a catalog")]
     List {
         #[arg(short = 'd', long = "directory", required = false)]
         directory: Option<String>,
@@ -24,15 +27,12 @@ pub enum Command {
         )]
         tags: Option<String>,
     },
+    #[command(about = "Download recorded media that is not persisted locally")]
     Diff,
 }
 
 #[derive(Args)]
-#[command(
-    about = "About for Download Subcommand",
-    long_about = "Long about for Download Subcommand"
-)]
-pub struct Download {
+pub struct DownloadArgs {
     #[arg(short = 'd', long = "directory", required = false, help = "")]
     pub directory: Option<String>,
 

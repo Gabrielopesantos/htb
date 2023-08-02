@@ -1,42 +1,42 @@
 mod cli;
 mod config;
 mod media;
-mod media_downloader;
+mod media_handler;
 mod repository;
 
 use std::path::Path;
 
 use clap::Parser;
-use cli::Download;
+use cli::DownloadArgs;
 use cli::{Cli, Command};
 use config::Config;
 use log::debug;
-use media_downloader::{MediaDownloader, YtDlp};
+use media_handler::{MediaHandler, YtDlp};
 use repository::SQLiteRepository;
 
 struct Api<T> {
-    media_downl: T,
+    media_handler: T,
     repository: SQLiteRepository,
     config: Config,
 }
 
-impl<T: MediaDownloader> Api<T> {
+impl<T: MediaHandler> Api<T> {
     fn new(
-        media_downl: T,
+        media_handler: T,
         repository: SQLiteRepository,
         config: Config,
     ) -> Self {
         Api {
-            media_downl,
+            media_handler,
             repository,
             config,
         }
     }
 
-    fn download_media(&self, arguments: &Download) -> anyhow::Result<()> {
+    fn download_media(&self, arguments: &DownloadArgs) -> anyhow::Result<()> {
         let directory = arguments.directory.as_deref().unwrap_or_default();
 
-        let media_download_output = self.media_downl.download(
+        let media_download_output = self.media_handler.download(
             arguments.url.as_ref(),
             &self.config.catalog_path,
             &directory,
@@ -66,9 +66,9 @@ impl<T: MediaDownloader> Api<T> {
         Ok(())
     }
 
-    fn record_media(&self, arguments: &Download) -> anyhow::Result<()> {
+    fn record_media(&self, arguments: &DownloadArgs) -> anyhow::Result<()> {
         let media_download_output = self
-            .media_downl
+            .media_handler
             .get_media_metadata(arguments.url.as_ref())?;
 
         // This is exactly the same as what we have above
@@ -108,7 +108,7 @@ impl<T: MediaDownloader> Api<T> {
         )?;
         if catalog_items.len() > 0 {
             for item in catalog_items {
-                println!("{}", item.info());
+                println!("{}", item);
             }
         } else {
             println!("No items to list");
@@ -117,8 +117,7 @@ impl<T: MediaDownloader> Api<T> {
         Ok(())
     }
 
-    // NOTE: Let's go with a sequential approach for now
-    // Too still if downloads aren't concurrent
+    // NOTE: Going with an iterative approach for now
     fn diff(&self) -> anyhow::Result<()> {
         let catalog_items = self.repository.query("", "")?;
         for media in catalog_items {
@@ -126,7 +125,7 @@ impl<T: MediaDownloader> Api<T> {
                 .join(&media.directory)
                 .join(&media.filename);
             if !media_file_path.exists() {
-                self.media_downl.download(
+                self.media_handler.download(
                     &media.url,
                     &self.config.catalog_path,
                     &media.directory,
@@ -140,7 +139,7 @@ impl<T: MediaDownloader> Api<T> {
 }
 
 fn main() -> anyhow::Result<()> {
-    // initialize logger
+    // Init logger
     env_logger::init();
 
     // read config
@@ -153,7 +152,6 @@ fn main() -> anyhow::Result<()> {
     // create instance of API
     let api = Api::new(YtDlp, repository, config);
 
-    // ??
     let command = Cli::parse().command.ok_or_else(|| {
         log::error!("invalid command provided");
         anyhow::Error::msg("invalid command provided")

@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS media (
 )",
                 (),
             )
-            .expect("Failed to create schema"); // FIXME: `expect()`
+            .expect("failed to create schema"); // FIXME: `expect()`
     }
     pub fn insert(
         &self,

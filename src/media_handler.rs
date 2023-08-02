@@ -2,11 +2,10 @@ use std::path::PathBuf;
 
 use youtube_dl::{YoutubeDl, YoutubeDlOutput};
 
-// NOTE: There's no point in using this trait is returns are specific to `yt-dlp`
-// Maybe handle `Result` in each method in return something standard?
-// NOTE: Name doesn't convey exactly the function of this structure
-pub trait MediaDownloader {
-    // NOTE: Why this needs to be a method cannot be an associated function?
+// NOTE: There's no point in using this trait as returns are specific to `yt-dlp`
+// Maybe handle `Result` in each method and return something standard?
+pub trait MediaHandler {
+    // NOTE: Why does this needs to be a method cannot be an associated function?
     fn download(
         &self,
         url: &str,
@@ -30,7 +29,7 @@ pub trait MediaDownloader {
 
 pub struct YtDlp;
 
-impl MediaDownloader for YtDlp {
+impl MediaHandler for YtDlp {
     fn download(
         &self,
         url: &str,
