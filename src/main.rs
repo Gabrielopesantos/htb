@@ -7,8 +7,7 @@ mod repository;
 use std::path::Path;
 
 use clap::Parser;
-use cli::DownloadArgs;
-use cli::{Cli, Command};
+use cli::{Cli, Command, DownloadArgs};
 use config::Config;
 use log::debug;
 use media_handler::{MediaHandler, YtDlp};
@@ -21,11 +20,7 @@ struct Api<T> {
 }
 
 impl<T: MediaHandler> Api<T> {
-    fn new(
-        media_handler: T,
-        repository: SQLiteRepository,
-        config: Config,
-    ) -> Self {
+    fn new(media_handler: T, repository: SQLiteRepository, config: Config) -> Self {
         Api {
             media_handler,
             repository,
@@ -47,12 +42,11 @@ impl<T: MediaHandler> Api<T> {
             media_download_output
                 .into_single_video()
                 .ok_or(anyhow::Error::msg(
-                "If download was successful, should have acess to single media",
-            ))?;
+                    "If download was successful, should have access to single media",
+                ))?;
         let tags = arguments.tags.as_deref().unwrap_or_default();
 
-        let filename =
-            arguments.filename.as_ref().unwrap_or(&media_metadata.title);
+        let filename = arguments.filename.as_ref().unwrap_or(&media_metadata.title);
         let directory = arguments.directory.as_deref().unwrap_or_default();
 
         self.repository.insert(
@@ -76,13 +70,12 @@ impl<T: MediaHandler> Api<T> {
             media_download_output
                 .into_single_video()
                 .ok_or(anyhow::Error::msg(
-                "If download was successful, should have acess to single media",
-            ))?;
+                    "If download was successful, should have access to single media",
+                ))?;
 
         let tags = arguments.tags.as_deref().unwrap_or_default();
 
-        let filename =
-            arguments.filename.as_ref().unwrap_or(&media_metadata.title);
+        let filename = arguments.filename.as_ref().unwrap_or(&media_metadata.title);
         let directory = arguments.directory.as_deref().unwrap_or_default();
 
         self.repository.insert(
@@ -117,7 +110,6 @@ impl<T: MediaHandler> Api<T> {
         Ok(())
     }
 
-    // NOTE: Going with an iterative approach for now
     fn diff(&self) -> anyhow::Result<()> {
         let catalog_items = self.repository.query("", "")?;
         for media in catalog_items {

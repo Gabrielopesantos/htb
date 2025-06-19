@@ -11,3 +11,4 @@ Cargo.lock
 
 # Others
 catalog.db
+.direnv/**
