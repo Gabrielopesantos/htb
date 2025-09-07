@@ -1,28 +1,30 @@
 use crate::{config, media::Media};
 use rusqlite::Connection;
 
+const DB_FILE_NAME: &str = "catalog.db";
+
+pub trait Repository {
+    fn insert_into_media(&self, media: &Media) -> anyhow::Result<()>;
+    fn query(&self, directory: &str, tags: &str) -> anyhow::Result<Vec<Media>>;
+}
+
 pub struct SQLiteRepository {
     conn: rusqlite::Connection,
 }
 
-// Implement a Catalog interface
-// The idea is to eventually have a service (business layer) to interact with
-// the repository for now we are doing it directly
 impl SQLiteRepository {
-    pub fn new(config: &config::Config) -> SQLiteRepository {
-        // NOTE: File in given path might not exist, create it before
-        let conn = Connection::open(&config.database_file_path)
-            .expect("Failed to establish connection");
+    pub fn new(config: &config::Config) -> anyhow::Result<Self> {
+        // File in given path might not exist, create it before
+        let conn = Connection::open(&config.catalog_path.join(DB_FILE_NAME))?;
         let repo = SQLiteRepository { conn };
-        repo.create_schema();
+        repo.apply_schema()?;
 
-        repo
+        Ok(repo)
     }
 
-    fn create_schema(&self) {
-        self.conn
-            .execute(
-                "
+    fn apply_schema(&self) -> anyhow::Result<()> {
+        self.conn.execute(
+            "
 CREATE TABLE IF NOT EXISTS media (
     id INTEGER PRIMARY KEY ASC,
     name TEXT NOT NULL,
@@ -32,27 +34,28 @@ CREATE TABLE IF NOT EXISTS media (
     tags TEXT,
     inserted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )",
-                (),
-            )
-            .expect("failed to create schema"); // FIXME: `expect()`
+            (),
+        )?;
+        Ok(())
     }
-    pub fn insert(
-        &self,
-        name: &str,
-        filename: &str,
-        directory: &str,
-        url: &str,
-        tags: &str,
-    ) {
-        self.conn
-            .execute(
-                "INSERT INTO media (name, filename, directory, url, tags) VALUES (?1, ?2, ?3, ?4, ?5)",
-                [name, filename, directory, url, tags],
-            )
-            .expect("failed to insert record"); // FIXME: `expect()`
+}
+
+impl Repository for SQLiteRepository {
+    fn insert_into_media(&self, media: &Media) -> anyhow::Result<()> {
+        self.conn.execute(
+            "INSERT INTO media (name, filename, directory, url, tags) VALUES (?1, ?2, ?3, ?4, ?5)",
+            [
+                &media.name,
+                &media.filename,
+                &media.library,
+                &media.url,
+                &media.tags,
+            ],
+        )?;
+        Ok(())
     }
 
-    pub fn query(
+    fn query(
         &self,
         directory: &str,
         _tags: &str, // NOTE: tags are still not supported
@@ -69,7 +72,7 @@ CREATE TABLE IF NOT EXISTS media (
                 Ok(Media {
                     name: row.get(0)?,
                     filename: row.get(1)?,
-                    directory: row.get(2)?,
+                    library: row.get(2)?,
                     url: row.get(3)?,
                     tags: row.get(4)?,
                 })
@@ -82,5 +85,17 @@ CREATE TABLE IF NOT EXISTS media (
         }
 
         Ok(catalog_items)
+    }
+}
+
+pub struct DummyRepository;
+
+impl Repository for DummyRepository {
+    fn insert_into_media(&self, _media: &Media) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn query(&self, _directory: &str, _tags: &str) -> anyhow::Result<Vec<Media>> {
+        Ok(vec![])
     }
 }
