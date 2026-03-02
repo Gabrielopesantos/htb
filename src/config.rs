@@ -1,3 +1,4 @@
+use crate::error::{HtbError, Result};
 use dirs::config_dir;
 use serde::{Deserialize, Serialize};
 use std::{fs::File, path::PathBuf};
@@ -22,9 +23,9 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Result<Self> {
         let config_path = config_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not get config directory"))?
+            .ok_or_else(|| HtbError::Config("Could not get config directory".to_string()))?
             .join("htb")
             .join(CONFIG_FILE_NAME);
 
@@ -41,14 +42,22 @@ impl Config {
 }
 
 // Create a new configuration file if it does not exist
-fn create_if_not_exists(config_path: &PathBuf) -> anyhow::Result<Option<Config>> {
+fn create_if_not_exists(config_path: &PathBuf) -> Result<Option<Config>> {
     if config_path.exists() {
         return Ok(None);
     }
 
     let default_config = Config::default();
     let config_json = serde_json::to_string_pretty(&default_config)?;
-    std::fs::create_dir_all(config_path.parent().unwrap())?;
+
+    // Safely handle parent directory creation
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    } else {
+        return Err(HtbError::Config(
+            "Config path has no parent directory".to_string(),
+        ));
+    }
     std::fs::write(config_path, config_json)?;
 
     Ok(Some(default_config))

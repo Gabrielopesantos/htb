@@ -1,3 +1,4 @@
+use crate::error::{HtbError, Result};
 use std::fmt;
 
 #[derive(Debug)]
@@ -51,12 +52,12 @@ impl MediaBuilder {
         self
     }
 
-    pub fn build(self) -> Result<Media, &'static str> {
+    pub fn build(self) -> Result<Media> {
         Ok(Media {
-            name: self.name.ok_or("name is required")?,
-            filename: self.filename.ok_or("filename is required")?,
-            library: self.library.ok_or("library is required")?,
-            url: self.url.ok_or("url is required")?,
+            name: self.name.ok_or(HtbError::Builder { field: "name" })?,
+            filename: self.filename.ok_or(HtbError::Builder { field: "filename" })?,
+            library: self.library.ok_or(HtbError::Builder { field: "library" })?,
+            url: self.url.ok_or(HtbError::Builder { field: "url" })?,
             tags: self.tags.unwrap_or_default(),
         })
     }

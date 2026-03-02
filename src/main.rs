@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod error;
 mod media;
 mod media_handler;
 mod repository;
@@ -7,7 +8,7 @@ mod repository;
 use clap::Parser;
 use cli::{Cli, Command, DownloadArgs};
 use config::Config;
-use log::{debug, warn};
+use error::{HtbError, Result};
 use media::Media;
 use media_handler::{MediaHandler, YtDlp};
 
@@ -28,7 +29,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         }
     }
 
-    fn download_media(&self, arguments: &DownloadArgs) -> anyhow::Result<()> {
+    fn download_media(&self, arguments: &DownloadArgs) -> Result<()> {
         let directory = arguments.directory.as_deref().unwrap_or("");
 
         let media_download_output = self.media_handler.download(
@@ -41,7 +42,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
 
         if !arguments.no_record {
             let media_metadata = media_download_output.into_single_video().ok_or_else(|| {
-                anyhow::anyhow!("If download was successful, should have access to single media")
+                HtbError::Other("If download was successful, should have access to single media".to_string())
             })?;
 
             let media = self.create_media_from_metadata(&media_metadata, arguments)?;
@@ -54,11 +55,11 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         Ok(())
     }
 
-    fn record_media(&self, args: &DownloadArgs) -> anyhow::Result<()> {
+    fn record_media(&self, args: &DownloadArgs) -> Result<()> {
         let media_download_output = self.media_handler.get_media_metadata(&args.url)?;
 
         let media_metadata = media_download_output.into_single_video().ok_or_else(|| {
-            anyhow::anyhow!("If metadata fetch was successful, should have access to single media")
+            HtbError::Other("If metadata fetch was successful, should have access to single media".to_string())
         })?;
 
         let media = self.create_media_from_metadata(&media_metadata, args)?;
@@ -72,7 +73,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         &self,
         metadata: &youtube_dl::SingleVideo,
         args: &DownloadArgs,
-    ) -> anyhow::Result<Media> {
+    ) -> Result<Media> {
         let name = &metadata.title;
         let filename = args.filename.as_ref().unwrap_or(name);
         let directory = args.directory.as_ref().map_or("", |v| v);
@@ -88,7 +89,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
             .map_err(|e| anyhow::anyhow!(e)) // Convert to anyhow::Error
     }
 
-    fn list_catalog(&self, args: cli::ListArgs) -> anyhow::Result<()> {
+    fn list_catalog(&self, args: cli::ListArgs) -> Result<()> {
         let catalog_items = self.repository.query(
             args.directory.as_deref().unwrap_or(""),
             args.tags.as_deref().unwrap_or(""),
@@ -104,7 +105,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         Ok(())
     }
 
-    fn diff(&self) -> anyhow::Result<()> {
+    fn diff(&self) -> Result<()> {
         let catalog_items = self.repository.query("", "")?;
         for media in catalog_items {
             let media_file_path = self
@@ -127,19 +128,19 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
     }
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<()> {
     // Init logger
     env_logger::init();
 
     // Read config
-    let config =
-        config::Config::new().or_else(|e| Err(anyhow::anyhow!("Error reading config: {}.", e)))?;
+    let config = config::Config::new()
+        .map_err(|e| HtbError::Config(format!("Error reading config: {}", e)))?;
     debug!("{:?}", config);
 
     // Parse command once
     let command = Cli::parse()
         .command
-        .ok_or_else(|| anyhow::anyhow!("command is required"))?;
+        .ok_or_else(|| HtbError::Other("command is required".to_string()))?;
 
     // Branch on repository type and create different Api instances
     if config.no_record {
@@ -157,7 +158,7 @@ fn main() -> anyhow::Result<()> {
 fn run_command<T: MediaHandler, R: Repository>(
     api: Api<T, R>,
     command: Command,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     match command {
         Command::Download(args) => api.download_media(&args),
         Command::Record(args) => api.record_media(&args),

@@ -1,11 +1,11 @@
-use crate::{config, media::Media};
+use crate::{config, error::Result, media::Media};
 use rusqlite::Connection;
 
 const DB_FILE_NAME: &str = "catalog.db";
 
 pub trait Repository {
-    fn insert_into_media(&self, media: &Media) -> anyhow::Result<()>;
-    fn query(&self, directory: &str, tags: &str) -> anyhow::Result<Vec<Media>>;
+    fn insert_into_media(&self, media: &Media) -> Result<()>;
+    fn query(&self, directory: &str, tags: &str) -> Result<Vec<Media>>;
 }
 
 pub struct SQLiteRepository {
@@ -13,7 +13,7 @@ pub struct SQLiteRepository {
 }
 
 impl SQLiteRepository {
-    pub fn new(config: &config::Config) -> anyhow::Result<Self> {
+    pub fn new(config: &config::Config) -> Result<Self> {
         // File in given path might not exist, create it before
         let conn = Connection::open(&config.catalog_path.join(DB_FILE_NAME))?;
         let repo = SQLiteRepository { conn };
@@ -22,7 +22,7 @@ impl SQLiteRepository {
         Ok(repo)
     }
 
-    fn apply_schema(&self) -> anyhow::Result<()> {
+    fn apply_schema(&self) -> Result<()> {
         self.conn.execute(
             "
 CREATE TABLE IF NOT EXISTS media (
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS media (
 }
 
 impl Repository for SQLiteRepository {
-    fn insert_into_media(&self, media: &Media) -> anyhow::Result<()> {
+    fn insert_into_media(&self, media: &Media) -> Result<()> {
         self.conn.execute(
             "INSERT INTO media (name, filename, directory, url, tags) VALUES (?1, ?2, ?3, ?4, ?5)",
             [
@@ -59,7 +59,7 @@ impl Repository for SQLiteRepository {
         &self,
         directory: &str,
         _tags: &str, // NOTE: tags are still not supported
-    ) -> anyhow::Result<Vec<Media>> {
+    ) -> Result<Vec<Media>> {
         // NOTE: Taking advantage of short circuirt evaluation to return everything
         // when directory has the default value
         let query = "SELECT name, filename, directory, url, tags FROM media WHERE directory = :directory OR :directory = ''";
@@ -91,11 +91,11 @@ impl Repository for SQLiteRepository {
 pub struct DummyRepository;
 
 impl Repository for DummyRepository {
-    fn insert_into_media(&self, _media: &Media) -> anyhow::Result<()> {
+    fn insert_into_media(&self, _media: &Media) -> Result<()> {
         Ok(())
     }
 
-    fn query(&self, _directory: &str, _tags: &str) -> anyhow::Result<Vec<Media>> {
+    fn query(&self, _directory: &str, _tags: &str) -> Result<Vec<Media>> {
         Ok(vec![])
     }
 }

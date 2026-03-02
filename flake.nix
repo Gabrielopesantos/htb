@@ -41,7 +41,7 @@
           version = "0.1.0";
           src = ./.;
 
-          cargoHash = "sha256-rr0g9Xfe63/1CypQa6oqwM4JgBafxccOhRnqy9cc9p8=";
+          cargoHash = "sha256-4oINRkAPGADZGEzRaYs45H1wuNBX4Bly9nnpni/6wbQ=";
 
           buildInputs = buildDeps;
 
