@@ -9,6 +9,7 @@ use clap::Parser;
 use cli::{Cli, Command, DownloadArgs};
 use config::Config;
 use error::{HtbError, Result};
+use log::{debug, info, warn};
 use media::Media;
 use media_handler::{MediaHandler, YtDlp};
 
@@ -32,6 +33,8 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
     fn download_media(&self, arguments: &DownloadArgs) -> Result<()> {
         let directory = arguments.directory.as_deref().unwrap_or("");
 
+        info!("Starting download from: {}", arguments.url);
+
         let media_download_output = self.media_handler.download(
             &arguments.url,
             &self.config.catalog_path,
@@ -48,14 +51,17 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
             let media = self.create_media_from_metadata(&media_metadata, arguments)?;
             debug!("Recording media in catalog");
             self.repository.insert_into_media(&media)?;
+            info!("Download completed and recorded: {}", media.name);
         } else {
             debug!("Skipping recording media as --no-record was provided");
+            info!("Download completed (not recorded)");
         }
 
         Ok(())
     }
 
     fn record_media(&self, args: &DownloadArgs) -> Result<()> {
+        info!("Fetching metadata for: {}", args.url);
         let media_download_output = self.media_handler.get_media_metadata(&args.url)?;
 
         let media_metadata = media_download_output.into_single_video().ok_or_else(|| {
@@ -64,6 +70,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
 
         let media = self.create_media_from_metadata(&media_metadata, args)?;
         self.repository.insert_into_media(&media)?;
+        info!("Media recorded in catalog: {}", media.name);
 
         Ok(())
     }
@@ -86,15 +93,16 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
             .url(&args.url)
             .tags(tags)
             .build()
-            .map_err(|e| anyhow::anyhow!(e)) // Convert to anyhow::Error
     }
 
     fn list_catalog(&self, args: cli::ListArgs) -> Result<()> {
+        info!("Querying catalog with filters - directory: {:?}, tags: {:?}", args.directory, args.tags);
         let catalog_items = self.repository.query(
             args.directory.as_deref().unwrap_or(""),
             args.tags.as_deref().unwrap_or(""),
         )?;
-        if catalog_items.len() > 0 {
+        if !catalog_items.is_empty() {
+            info!("Found {} items", catalog_items.len());
             for item in catalog_items {
                 println!("{}", item);
             }
@@ -106,7 +114,10 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
     }
 
     fn diff(&self) -> Result<()> {
+        info!("Running diff to find missing files");
         let catalog_items = self.repository.query("", "")?;
+        let mut missing_count = 0;
+
         for media in catalog_items {
             let media_file_path = self
                 .config
@@ -114,6 +125,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
                 .join(&media.library)
                 .join(&media.filename);
             if !media_file_path.exists() {
+                info!("Missing file detected, downloading: {}", media.name);
                 self.media_handler.download(
                     &media.url,
                     &self.config.catalog_path,
@@ -121,9 +133,11 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
                     Some(&media.filename),
                     self.config.override_if_exists,
                 )?;
+                missing_count += 1;
             }
         }
 
+        info!("Diff completed: {} files downloaded", missing_count);
         Ok(())
     }
 }

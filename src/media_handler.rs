@@ -1,3 +1,4 @@
+use log::debug;
 use std::path::Path;
 
 use youtube_dl::{YoutubeDl, YoutubeDlOutput};
@@ -40,6 +41,8 @@ impl MediaHandler for YtDlp {
             ))
         })?;
 
+        debug!("Downloading to: {}", output_file_path);
+
         let mut yt_dl = YoutubeDl::new(url);
         yt_dl
             .youtube_dl_path("yt-dlp")
@@ -64,15 +67,18 @@ impl MediaHandler for YtDlp {
 
             if let Ok(()) = Self::ensure_download_archive(&download_archive_path) {
                 if let Some(path_str) = download_archive_path.to_str() {
+                    debug!("Using download archive: {}", path_str);
                     yt_dl.extra_arg("--download-archive").extra_arg(path_str);
                 }
             }
         }
 
+        debug!("Executing yt-dlp command");
         yt_dl.run()
     }
 
     fn get_media_metadata(&self, url: &str) -> Result<YoutubeDlOutput, youtube_dl::Error> {
+        debug!("Fetching metadata for URL: {}", url);
         YoutubeDl::new(url)
             .youtube_dl_path("yt-dlp")
             .download(false)
@@ -92,7 +98,6 @@ impl YtDlp {
         std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .write(true)
             .open(archive_path)
             .map(|_| ()) // We don't need the file handle, just ensure it exists
     }

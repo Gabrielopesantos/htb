@@ -15,7 +15,7 @@ pub struct SQLiteRepository {
 impl SQLiteRepository {
     pub fn new(config: &config::Config) -> Result<Self> {
         // File in given path might not exist, create it before
-        let conn = Connection::open(&config.catalog_path.join(DB_FILE_NAME))?;
+        let conn = Connection::open(config.catalog_path.join(DB_FILE_NAME))?;
         let repo = SQLiteRepository { conn };
         repo.apply_schema()?;
 
@@ -36,6 +36,23 @@ CREATE TABLE IF NOT EXISTS media (
 )",
             (),
         )?;
+
+        // Create indexes for commonly queried columns
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_media_directory ON media(directory)",
+            (),
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_media_tags ON media(tags)",
+            (),
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_media_inserted_at ON media(inserted_at)",
+            (),
+        )?;
+
         Ok(())
     }
 }
@@ -58,15 +75,20 @@ impl Repository for SQLiteRepository {
     fn query(
         &self,
         directory: &str,
-        _tags: &str, // NOTE: tags are still not supported
+        tags: &str,
     ) -> Result<Vec<Media>> {
-        // NOTE: Taking advantage of short circuirt evaluation to return everything
-        // when directory has the default value
-        let query = "SELECT name, filename, directory, url, tags FROM media WHERE directory = :directory OR :directory = ''";
+        // Build query with tag filtering support
+        let query = "
+            SELECT name, filename, directory, url, tags
+            FROM media
+            WHERE (directory = :directory OR :directory = '')
+              AND (tags LIKE '%' || :tags || '%' OR :tags = '')
+        ";
+
         let mut stmt = self.conn.prepare(query)?;
 
         let rows = stmt.query_map(
-            &[(":directory", directory), (":directory", directory)],
+            &[(":directory", directory), (":directory", directory), (":tags", tags), (":tags", tags)],
             |row| {
                 // NOTE: Maybe have a `new` instead?
                 Ok(Media {

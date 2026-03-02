@@ -58,6 +58,7 @@ fn create_if_not_exists(config_path: &PathBuf) -> Result<Option<Config>> {
             "Config path has no parent directory".to_string(),
         ));
     }
+
     std::fs::write(config_path, config_json)?;
 
     Ok(Some(default_config))

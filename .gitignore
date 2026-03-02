@@ -7,4 +7,4 @@
 
 # Others
 catalog.db
-.direnv/**
+.direnv
