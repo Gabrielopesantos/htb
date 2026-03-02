@@ -11,16 +11,6 @@ pub struct Media {
 }
 
 impl Media {
-    pub fn new(name: &str, filename: &str, directory: &str, url: &str, tags: &str) -> Self {
-        Self {
-            name: name.to_owned(),
-            filename: filename.to_owned(),
-            library: directory.to_owned(),
-            url: url.to_owned(),
-            tags: tags.to_owned(),
-        }
-    }
-
     pub fn builder() -> MediaBuilder {
         MediaBuilder::default()
     }
