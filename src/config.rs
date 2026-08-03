@@ -1,5 +1,5 @@
 use crate::error::{HtbError, Result};
-use dirs::config_dir;
+use dirs::{audio_dir, config_dir, home_dir};
 use serde::{Deserialize, Serialize};
 use std::{fs::File, path::PathBuf};
 
@@ -12,14 +12,12 @@ pub struct Config {
     pub override_if_exists: bool, // If true, will override existing files when downloading
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            catalog_path: PathBuf::from("/tmp/htb"),
-            no_record: false,
-            override_if_exists: false,
-        }
-    }
+// Falls back to the home directory if the platform doesn't report a music directory.
+fn default_catalog_path() -> Result<PathBuf> {
+    audio_dir()
+        .map(|music| music.join("htb"))
+        .or_else(|| home_dir().map(|home| home.join("htb")))
+        .ok_or_else(|| HtbError::Config("Could not determine a default catalog path".to_string()))
 }
 
 impl Config {
@@ -29,15 +27,20 @@ impl Config {
             .join("htb")
             .join(CONFIG_FILE_NAME);
 
-        match create_if_not_exists(&config_path)? {
-            Some(config) => Ok(config),
+        let config = match create_if_not_exists(&config_path)? {
+            Some(config) => config,
             None => {
                 // If the configuration file exists, read it and deserialize it
                 let file = File::open(&config_path)?;
-                let config: Config = serde_json::from_reader(file)?;
-                Ok(config)
+                serde_json::from_reader(file)?
             }
-        }
+        };
+
+        // catalog_path might not exist yet (fresh default, or a hand-edited
+        // config pointing somewhere new), so create it if necessary
+        std::fs::create_dir_all(&config.catalog_path)?;
+
+        Ok(config)
     }
 }
 
@@ -47,7 +50,11 @@ fn create_if_not_exists(config_path: &PathBuf) -> Result<Option<Config>> {
         return Ok(None);
     }
 
-    let default_config = Config::default();
+    let default_config = Config {
+        catalog_path: default_catalog_path()?,
+        no_record: false,
+        override_if_exists: false,
+    };
     let config_json = serde_json::to_string_pretty(&default_config)?;
 
     // Safely handle parent directory creation

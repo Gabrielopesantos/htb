@@ -11,7 +11,7 @@ use config::Config;
 use error::{HtbError, Result};
 use log::{debug, info, warn};
 use media::Media;
-use media_handler::{MediaHandler, YtDlp};
+use media_handler::{DownloadOutcome, MediaHandler, YtDlp};
 
 use crate::repository::Repository;
 
@@ -35,7 +35,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
 
         info!("Starting download from: {}", arguments.url);
 
-        let media_download_output = self.media_handler.download(
+        let outcome = self.media_handler.download(
             &arguments.url,
             &self.config.catalog_path,
             directory,
@@ -43,12 +43,32 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
             self.config.override_if_exists,
         )?;
 
+        let (output, resolved_path) = match outcome {
+            DownloadOutcome::Downloaded { output, path } => (output, path),
+            DownloadOutcome::AlreadyDownloaded => {
+                info!("Already downloaded, skipping: {}", arguments.url);
+                return Ok(());
+            }
+        };
+
         if !arguments.no_record {
-            let media_metadata = media_download_output.into_single_video().ok_or_else(|| {
-                HtbError::Other("If download was successful, should have access to single media".to_string())
+            let media_metadata = output.into_single_video().ok_or_else(|| {
+                HtbError::Other(
+                    "If download was successful, should have access to single media".to_string(),
+                )
             })?;
 
-            let media = self.create_media_from_metadata(&media_metadata, arguments)?;
+            let filename = resolved_path
+                .file_name()
+                .and_then(|f| f.to_str())
+                .ok_or_else(|| {
+                    HtbError::Other(format!(
+                        "Resolved path has no valid filename: {}",
+                        resolved_path.display()
+                    ))
+                })?;
+
+            let media = self.create_media_from_metadata(&media_metadata, arguments, filename)?;
             debug!("Recording media in catalog");
             self.repository.insert_into_media(&media)?;
             info!("Download completed and recorded: {}", media.name);
@@ -65,10 +85,13 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         let media_download_output = self.media_handler.get_media_metadata(&args.url)?;
 
         let media_metadata = media_download_output.into_single_video().ok_or_else(|| {
-            HtbError::Other("If metadata fetch was successful, should have access to single media".to_string())
+            HtbError::Other(
+                "If metadata fetch was successful, should have access to single media".to_string(),
+            )
         })?;
 
-        let media = self.create_media_from_metadata(&media_metadata, args)?;
+        let filename = args.filename.as_deref().unwrap_or(&media_metadata.title);
+        let media = self.create_media_from_metadata(&media_metadata, args, filename)?;
         self.repository.insert_into_media(&media)?;
         info!("Media recorded in catalog: {}", media.name);
 
@@ -80,9 +103,9 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         &self,
         metadata: &youtube_dl::SingleVideo,
         args: &DownloadArgs,
+        filename: &str,
     ) -> Result<Media> {
         let name = &metadata.title;
-        let filename = args.filename.as_ref().unwrap_or(name);
         let directory = args.directory.as_ref().map_or("", |v| v);
         let tags = args.tags.as_deref().unwrap_or_default();
 
@@ -96,7 +119,10 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
     }
 
     fn list_catalog(&self, args: cli::ListArgs) -> Result<()> {
-        info!("Querying catalog with filters - directory: {:?}, tags: {:?}", args.directory, args.tags);
+        info!(
+            "Querying catalog with filters - directory: {:?}, tags: {:?}",
+            args.directory, args.tags
+        );
         let catalog_items = self.repository.query(
             args.directory.as_deref().unwrap_or(""),
             args.tags.as_deref().unwrap_or(""),
@@ -126,14 +152,21 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
                 .join(&media.filename);
             if !media_file_path.exists() {
                 info!("Missing file detected, downloading: {}", media.name);
-                self.media_handler.download(
+                let outcome = self.media_handler.download(
                     &media.url,
                     &self.config.catalog_path,
                     &media.library,
                     Some(&media.filename),
                     self.config.override_if_exists,
                 )?;
-                missing_count += 1;
+
+                match outcome {
+                    DownloadOutcome::Downloaded { .. } => missing_count += 1,
+                    DownloadOutcome::AlreadyDownloaded => warn!(
+                        "Still missing after re-download attempt (already in download archive): {}",
+                        media.name
+                    ),
+                }
             }
         }
 
@@ -163,16 +196,15 @@ fn main() -> Result<()> {
         let api = Api::new(YtDlp, repository, config);
         run_command(api, command)
     } else {
-        let repository = repository::SQLiteRepository::new(&config)?;
+        let repository = repository::SQLiteRepository::new(&config).map_err(|e| {
+            HtbError::Other(format!("Could not find or create catalog database: {}", e))
+        })?;
         let api = Api::new(YtDlp, repository, config);
         run_command(api, command)
     }
 }
 
-fn run_command<T: MediaHandler, R: Repository>(
-    api: Api<T, R>,
-    command: Command,
-) -> Result<()> {
+fn run_command<T: MediaHandler, R: Repository>(api: Api<T, R>, command: Command) -> Result<()> {
     match command {
         Command::Download(args) => api.download_media(&args),
         Command::Record(args) => api.record_media(&args),

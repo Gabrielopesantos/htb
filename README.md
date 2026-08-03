@@ -67,7 +67,7 @@ htb diff
 
 htb uses a JSON configuration file located at `~/.config/htb/config.json`. The configuration includes:
 
-- `catalog_path`: Directory where media files and the catalog database are stored (default: `/tmp/htb`)
+- `catalog_path`: Directory where media files and the catalog database are stored (default: `~/Music/htb` with fallback to `~/htb`)
 - `no_record`: If `true`, disables catalog recording (default: `false`)
 - `override_if_exists`: If `true`, overwrites existing files when downloading (default: `false`)
 
