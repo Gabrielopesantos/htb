@@ -91,12 +91,19 @@ impl MediaHandler for YtDlp {
         if !override_if_exists {
             let download_archive_path = base_path.join(DOWNLOAD_ARCHIVE);
 
-            if let Ok(()) = Self::ensure_download_archive(&download_archive_path) {
-                if let Some(path_str) = download_archive_path.to_str() {
-                    debug!("Using download archive: {}", path_str);
-                    yt_dl.extra_arg("--download-archive").extra_arg(path_str);
-                    archive_active = true;
+            match Self::ensure_download_archive(&download_archive_path) {
+                Ok(()) => {
+                    if let Some(path_str) = download_archive_path.to_str() {
+                        debug!("Using download archive: {}", path_str);
+                        yt_dl.extra_arg("--download-archive").extra_arg(path_str);
+                        archive_active = true;
+                    }
                 }
+                Err(e) => warn!(
+                    "Could not create/access download archive {}: {}. Proceeding without --download-archive.",
+                    download_archive_path.display(),
+                    e
+                ),
             }
         }
 
