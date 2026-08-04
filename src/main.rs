@@ -3,17 +3,74 @@ mod config;
 mod error;
 mod media;
 mod media_handler;
+mod progress;
 mod repository;
+mod tagger;
+mod title;
 
 use clap::Parser;
-use cli::{Cli, Command, DownloadArgs};
+use cli::{Cli, Command, DownloadArgs, TagOverrides};
 use config::Config;
 use error::{HtbError, Result};
 use log::{debug, info, warn};
 use media::Media;
 use media_handler::{DownloadOutcome, MediaHandler, YtDlp};
 
+use std::path::{Path, PathBuf};
+
 use crate::repository::Repository;
+
+/// Drops promotional noise from a freshly downloaded file's name. The
+/// `[<video id>]` the output template appends is preserved, so the file stays
+/// unambiguous without the marketing text. Returns the path to use from here on.
+fn rename_cleaned(path: &Path) -> Result<PathBuf> {
+    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+        return Ok(path.to_path_buf());
+    };
+
+    let cleaned = title::clean(stem);
+    if cleaned == stem || cleaned.is_empty() {
+        return Ok(path.to_path_buf());
+    }
+
+    // Built as a string rather than via `set_extension`, which would corrupt a
+    // name that itself contains a dot ("Song feat. Someone").
+    let filename = match path.extension().and_then(|e| e.to_str()) {
+        Some(extension) => format!("{cleaned}.{extension}"),
+        None => cleaned,
+    };
+    let target = path.with_file_name(filename);
+
+    if target.exists() {
+        warn!(
+            "Cleaned name {} already exists, keeping {}",
+            target.display(),
+            path.display()
+        );
+        return Ok(path.to_path_buf());
+    }
+
+    debug!("Renaming to cleaned name: {}", target.display());
+    std::fs::rename(path, &target)?;
+
+    Ok(target)
+}
+
+/// Fills in a title override from the cleaned name when the user did not give
+/// one, so the ID3 title matches the catalog and survives a later `diff`.
+fn effective_overrides(
+    provided: &TagOverrides,
+    raw_title: &str,
+    cleaned_title: &str,
+) -> TagOverrides {
+    let mut overrides = provided.clone();
+
+    if overrides.title.is_none() && cleaned_title != raw_title {
+        overrides.title = Some(cleaned_title.to_string());
+    }
+
+    overrides
+}
 
 struct Api<T, R> {
     media_handler: T,
@@ -46,18 +103,43 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         let (output, resolved_path) = match outcome {
             DownloadOutcome::Downloaded { output, path } => (output, path),
             DownloadOutcome::AlreadyDownloaded => {
-                info!("Already downloaded, skipping: {}", arguments.url);
+                if arguments.overrides.is_empty() {
+                    info!("Already downloaded, skipping: {}", arguments.url);
+                } else {
+                    // The file is already on disk, so nothing was tagged. Saying
+                    // so beats exiting 0 as if the flags had been applied.
+                    warn!(
+                        "Already downloaded, so tag options were ignored. \
+                         Use `htb tag -u {}` to change its tags.",
+                        arguments.url
+                    );
+                }
                 return Ok(());
             }
         };
 
-        if !arguments.no_record {
-            let media_metadata = output.into_single_video().ok_or_else(|| {
-                HtbError::Other(
-                    "If download was successful, should have access to single media".to_string(),
-                )
-            })?;
+        // An explicit -f is the user's own name, so leave it alone.
+        let resolved_path = if arguments.filename.is_none() {
+            rename_cleaned(&resolved_path)?
+        } else {
+            resolved_path
+        };
 
+        let media_metadata = output.into_single_video().ok_or_else(|| {
+            HtbError::Other(
+                "If download was successful, should have access to a single audio track"
+                    .to_string(),
+            )
+        })?;
+
+        let name = title::clean(&media_metadata.title);
+        let overrides = effective_overrides(&arguments.overrides, &media_metadata.title, &name);
+
+        // Tag before recording, so a tagging failure never leaves a catalog row
+        // claiming tags that were never written to the file.
+        tagger::apply_overrides(&resolved_path, &overrides)?;
+
+        if !arguments.no_record {
             let filename = resolved_path
                 .file_name()
                 .and_then(|f| f.to_str())
@@ -68,12 +150,12 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
                     ))
                 })?;
 
-            let media = self.create_media_from_metadata(&media_metadata, arguments, filename)?;
-            debug!("Recording media in catalog");
+            let media = self.create_media(&name, filename, arguments, &overrides)?;
+            debug!("Recording in catalog");
             self.repository.insert_into_media(&media)?;
             info!("Download completed and recorded: {}", media.name);
         } else {
-            debug!("Skipping recording media as --no-record was provided");
+            debug!("Skipping catalog recording as --no-record was provided");
             info!("Download completed (not recorded)");
         }
 
@@ -86,26 +168,30 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
 
         let media_metadata = media_download_output.into_single_video().ok_or_else(|| {
             HtbError::Other(
-                "If metadata fetch was successful, should have access to single media".to_string(),
+                "If metadata fetch was successful, should have access to a single audio track"
+                    .to_string(),
             )
         })?;
 
-        let filename = args.filename.as_deref().unwrap_or(&media_metadata.title);
-        let media = self.create_media_from_metadata(&media_metadata, args, filename)?;
+        let name = title::clean(&media_metadata.title);
+        let overrides = effective_overrides(&args.overrides, &media_metadata.title, &name);
+
+        let filename = args.filename.as_deref().unwrap_or(&name);
+        let media = self.create_media(&name, filename, args, &overrides)?;
         self.repository.insert_into_media(&media)?;
-        info!("Media recorded in catalog: {}", media.name);
+        info!("Recorded in catalog: {}", media.name);
 
         Ok(())
     }
 
     // Helper method to reduce duplication
-    fn create_media_from_metadata(
+    fn create_media(
         &self,
-        metadata: &youtube_dl::SingleVideo,
-        args: &DownloadArgs,
+        name: &str,
         filename: &str,
+        args: &DownloadArgs,
+        overrides: &TagOverrides,
     ) -> Result<Media> {
-        let name = &metadata.title;
         let directory = args.directory.as_ref().map_or("", |v| v);
         let tags = args.tags.as_deref().unwrap_or_default();
 
@@ -115,6 +201,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
             .library(directory)
             .url(&args.url)
             .tags(tags)
+            .overrides(overrides.clone())
             .build()
     }
 
@@ -161,7 +248,12 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
                 )?;
 
                 match outcome {
-                    DownloadOutcome::Downloaded { .. } => missing_count += 1,
+                    DownloadOutcome::Downloaded { path, .. } => {
+                        // A re-download only produces yt-dlp's baseline tags,
+                        // so the catalog's overrides have to be re-applied.
+                        tagger::apply_overrides(&path, &media.overrides)?;
+                        missing_count += 1;
+                    }
                     DownloadOutcome::AlreadyDownloaded => warn!(
                         "Still missing after re-download attempt (already in download archive): {}",
                         media.name
@@ -171,6 +263,55 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         }
 
         info!("Diff completed: {} files downloaded", missing_count);
+        Ok(())
+    }
+
+    fn tag_media(&self, args: &cli::TagArgs) -> Result<()> {
+        if args.overrides.is_empty() {
+            return Err(HtbError::Other(
+                "No tag options given; pass at least one of --title/--artist/--album/--track/--year/--genre"
+                    .to_string(),
+            ));
+        }
+
+        let entries = self.repository.find_by_url(&args.url)?;
+        let Some(first) = entries.first() else {
+            return Err(HtbError::Other(format!(
+                "No catalog entry found for {}",
+                args.url
+            )));
+        };
+        if entries.len() > 1 {
+            warn!(
+                "{} catalog entries share this URL, updating all of them",
+                entries.len()
+            );
+        }
+
+        let merged = first.overrides.overlay(&args.overrides);
+
+        // Write the files before the catalog, so a tagging failure never leaves
+        // rows claiming tags that are not on disk.
+        for media in &entries {
+            let media_file_path = self
+                .config
+                .catalog_path
+                .join(&media.library)
+                .join(&media.filename);
+
+            if media_file_path.exists() {
+                tagger::apply_overrides(&media_file_path, &merged)?;
+            } else {
+                warn!(
+                    "File not found, updating catalog only (run `htb diff` to restore it): {}",
+                    media_file_path.display()
+                );
+            }
+        }
+
+        let updated = self.repository.update_overrides(&args.url, &merged)?;
+        info!("Tags updated for {} catalog entrie(s)", updated);
+
         Ok(())
     }
 }
@@ -210,5 +351,85 @@ fn run_command<T: MediaHandler, R: Repository>(api: Api<T, R>, command: Command)
         Command::Record(args) => api.record_media(&args),
         Command::List(args) => api.list_catalog(args),
         Command::Diff => api.diff(),
+        Command::Tag(args) => api.tag_media(&args),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Creates `name` in a per-test scratch directory and returns its path.
+    fn touch(dir: &str, name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("htb-test-{}-{}", std::process::id(), dir));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let path = dir.join(name);
+        std::fs::write(&path, b"").unwrap();
+        path
+    }
+
+    #[test]
+    fn rename_cleaned_strips_noise_and_keeps_the_id() {
+        let path = touch("rename", "Song (Official Video) [aBcD1234xyz].mp3");
+
+        let renamed = rename_cleaned(&path).unwrap();
+
+        assert_eq!(renamed.file_name().unwrap(), "Song [aBcD1234xyz].mp3");
+        assert!(renamed.exists());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn rename_cleaned_preserves_a_dot_in_the_name() {
+        let path = touch("dot", "Song feat. Someone (Official Video).mp3");
+
+        let renamed = rename_cleaned(&path).unwrap();
+
+        assert_eq!(renamed.file_name().unwrap(), "Song feat. Someone.mp3");
+    }
+
+    #[test]
+    fn rename_cleaned_is_a_noop_for_clean_names() {
+        let path = touch("noop", "Song [aBcD1234xyz].mp3");
+
+        assert_eq!(rename_cleaned(&path).unwrap(), path);
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn rename_cleaned_keeps_the_original_on_collision() {
+        let path = touch("collision", "Song (Official Video).mp3");
+        touch("collision", "Song.mp3");
+
+        assert_eq!(rename_cleaned(&path).unwrap(), path);
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn effective_overrides_fills_in_the_cleaned_title() {
+        let overrides =
+            effective_overrides(&TagOverrides::default(), "Song (Official Video)", "Song");
+
+        assert_eq!(overrides.title.as_deref(), Some("Song"));
+    }
+
+    #[test]
+    fn effective_overrides_respects_an_explicit_title() {
+        let provided = TagOverrides {
+            title: Some("Mine".into()),
+            ..Default::default()
+        };
+
+        let overrides = effective_overrides(&provided, "Song (Official Video)", "Song");
+
+        assert_eq!(overrides.title.as_deref(), Some("Mine"));
+    }
+
+    #[test]
+    fn effective_overrides_stays_empty_when_nothing_was_cleaned() {
+        let overrides = effective_overrides(&TagOverrides::default(), "Song", "Song");
+
+        assert!(overrides.is_empty());
     }
 }

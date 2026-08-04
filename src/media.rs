@@ -1,3 +1,4 @@
+use crate::cli::TagOverrides;
 use crate::error::{HtbError, Result};
 use std::fmt;
 
@@ -8,7 +9,7 @@ pub struct Media {
     pub library: String,
     pub url: String,
     pub tags: String,
-    // pub format String,
+    pub overrides: TagOverrides,
 }
 
 impl Media {
@@ -24,6 +25,7 @@ pub struct MediaBuilder {
     library: Option<String>,
     url: Option<String>,
     tags: Option<String>,
+    overrides: Option<TagOverrides>,
 }
 
 impl MediaBuilder {
@@ -52,13 +54,23 @@ impl MediaBuilder {
         self
     }
 
+    // The six override fields always travel together, from a single
+    // `#[command(flatten)]`, so they get one setter rather than six.
+    pub fn overrides(mut self, overrides: TagOverrides) -> Self {
+        self.overrides = Some(overrides);
+        self
+    }
+
     pub fn build(self) -> Result<Media> {
         Ok(Media {
             name: self.name.ok_or(HtbError::Builder { field: "name" })?,
-            filename: self.filename.ok_or(HtbError::Builder { field: "filename" })?,
+            filename: self
+                .filename
+                .ok_or(HtbError::Builder { field: "filename" })?,
             library: self.library.ok_or(HtbError::Builder { field: "library" })?,
             url: self.url.ok_or(HtbError::Builder { field: "url" })?,
             tags: self.tags.unwrap_or_default(),
+            overrides: self.overrides.unwrap_or_default(),
         })
     }
 }

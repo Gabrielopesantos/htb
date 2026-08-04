@@ -7,8 +7,8 @@ const CONFIG_FILE_NAME: &str = "config.json";
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub catalog_path: PathBuf, // Path where the catalog database and media files are stored
-    pub no_record: bool,       // If true, will not record downloaded media in the catalog
+    pub catalog_path: PathBuf, // Path where the catalog database and audio files are stored
+    pub no_record: bool,       // If true, will not record downloaded audio in the catalog
     pub override_if_exists: bool, // If true, will override existing files when downloading
 }
 

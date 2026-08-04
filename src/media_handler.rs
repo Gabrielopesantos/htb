@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use youtube_dl::{YoutubeDl, YoutubeDlOutput};
 
 use crate::error::HtbError;
+use crate::progress::Spinner;
 
 const DOWNLOAD_ARCHIVE: &str = ".htb_downloaded.txt";
 
@@ -62,7 +63,9 @@ impl MediaHandler for YtDlp {
         reset_scratch_file(&scratch_path)?;
         let scratch_arg = scratch_path
             .to_str()
-            .ok_or_else(|| HtbError::Other(format!("Invalid scratch path: {}", scratch_path.display())))?
+            .ok_or_else(|| {
+                HtbError::Other(format!("Invalid scratch path: {}", scratch_path.display()))
+            })?
             .replace('%', "%%"); // the FILE operand is itself an outtmpl
 
         let mut yt_dl = YoutubeDl::new(url);
@@ -73,7 +76,10 @@ impl MediaHandler for YtDlp {
             .extra_arg("--no-playlist")
             .extra_arg("--no-continue")
             .extra_arg("-f")
-            .extra_arg("bestaudio")
+            // Falls back to a combined stream: YouTube does not always expose
+            // an audio-only format, and --extract-audio below still yields an
+            // mp3 either way. Bare "bestaudio" hard-fails on those.
+            .extra_arg("bestaudio/best")
             .extra_arg("--downloader")
             .extra_arg("ffmpeg")
             .extra_arg("--audio-format")
@@ -81,6 +87,14 @@ impl MediaHandler for YtDlp {
             .extra_arg("--audio-quality")
             .extra_arg("0")
             .extra_arg("--no-keep-video")
+            // Baseline tags and cover art. These run before
+            // MoveFilesAfterDownloadPP, so the after_move:filepath readback
+            // below still reports the final path. --embed-thumbnail
+            // self-enables writethumbnail and cleans up its temp image.
+            .extra_arg("--embed-metadata")
+            .extra_arg("--embed-thumbnail")
+            .extra_arg("--convert-thumbnails")
+            .extra_arg("jpg")
             .extra_arg("-o")
             .extra_arg(output_file_path)
             .extra_arg("--print-to-file")
@@ -108,7 +122,10 @@ impl MediaHandler for YtDlp {
         }
 
         debug!("Executing yt-dlp command");
-        let run_result = yt_dl.run();
+        let run_result = {
+            let _spinner = Spinner::start("Downloading...");
+            yt_dl.run()
+        };
 
         let raw = match std::fs::read_to_string(&scratch_path) {
             Ok(s) => Some(s),
@@ -120,7 +137,11 @@ impl MediaHandler for YtDlp {
 
         if let Err(e) = std::fs::remove_file(&scratch_path) {
             if e.kind() != std::io::ErrorKind::NotFound {
-                warn!("Failed to clean up scratch file {}: {}", scratch_path.display(), e);
+                warn!(
+                    "Failed to clean up scratch file {}: {}",
+                    scratch_path.display(),
+                    e
+                );
             }
         }
 
@@ -128,7 +149,9 @@ impl MediaHandler for YtDlp {
             // yt-dlp exits 0 but prints `null` on a `--download-archive` skip;
             // the crate can't deserialize that into `SingleVideo` and surfaces
             // it as a Json error rather than a successful empty output.
-            Err(youtube_dl::Error::Json(_)) if archive_active => Ok(DownloadOutcome::AlreadyDownloaded),
+            Err(youtube_dl::Error::Json(_)) if archive_active => {
+                Ok(DownloadOutcome::AlreadyDownloaded)
+            }
             Err(e) => Err(e.into()),
             Ok(output) => match resolved_path {
                 Some(path) => Ok(DownloadOutcome::Downloaded { output, path }),
@@ -139,11 +162,14 @@ impl MediaHandler for YtDlp {
 
     fn get_media_metadata(&self, url: &str) -> crate::error::Result<YoutubeDlOutput> {
         debug!("Fetching metadata for URL: {}", url);
-        let output = YoutubeDl::new(url)
-            .youtube_dl_path("yt-dlp")
-            .download(false)
-            .extra_arg("--no-playlist")
-            .run()?;
+        let output = {
+            let _spinner = Spinner::start("Fetching metadata...");
+            YoutubeDl::new(url)
+                .youtube_dl_path("yt-dlp")
+                .download(false)
+                .extra_arg("--no-playlist")
+                .run()?
+        };
         Ok(output)
     }
 }
@@ -217,8 +243,8 @@ mod tests {
     #[test]
     fn parse_printed_path_handles_spaces_and_brackets() {
         assert_eq!(
-            parse_printed_path(Some("/music/My Song [dQw4w9WgXcQ].mp3\n")),
-            Some(PathBuf::from("/music/My Song [dQw4w9WgXcQ].mp3"))
+            parse_printed_path(Some("/music/My Song [aBcD1234xyz].mp3\n")),
+            Some(PathBuf::from("/music/My Song [aBcD1234xyz].mp3"))
         );
     }
 

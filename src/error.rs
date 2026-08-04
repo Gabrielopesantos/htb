@@ -18,6 +18,9 @@ pub enum HtbError {
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[error("Tagging error: {0}")]
+    Tag(#[from] lofty::error::LoftyError),
+
     #[error("Media builder error: {field} is required")]
     Builder { field: &'static str },
 
