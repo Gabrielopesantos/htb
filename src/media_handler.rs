@@ -29,7 +29,7 @@ pub trait MediaHandler {
         override_if_exists: bool,
     ) -> crate::error::Result<DownloadOutcome>;
 
-    fn get_media_metadata(&self, url: &str) -> Result<YoutubeDlOutput, youtube_dl::Error>;
+    fn get_media_metadata(&self, url: &str) -> crate::error::Result<YoutubeDlOutput>;
 }
 
 pub struct YtDlp;
@@ -137,13 +137,14 @@ impl MediaHandler for YtDlp {
         }
     }
 
-    fn get_media_metadata(&self, url: &str) -> Result<YoutubeDlOutput, youtube_dl::Error> {
+    fn get_media_metadata(&self, url: &str) -> crate::error::Result<YoutubeDlOutput> {
         debug!("Fetching metadata for URL: {}", url);
-        YoutubeDl::new(url)
+        let output = YoutubeDl::new(url)
             .youtube_dl_path("yt-dlp")
             .download(false)
             .extra_arg("--no-playlist")
-            .run()
+            .run()?;
+        Ok(output)
     }
 }
 
@@ -184,4 +185,48 @@ fn parse_printed_path(raw: Option<&str>) -> Option<PathBuf> {
         return None;
     }
     Some(PathBuf::from(line))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_printed_path_none_when_absent() {
+        assert_eq!(parse_printed_path(None), None);
+    }
+
+    #[test]
+    fn parse_printed_path_none_when_empty() {
+        assert_eq!(parse_printed_path(Some("")), None);
+    }
+
+    #[test]
+    fn parse_printed_path_none_when_na() {
+        assert_eq!(parse_printed_path(Some("NA\n")), None);
+    }
+
+    #[test]
+    fn parse_printed_path_trims_trailing_newline() {
+        assert_eq!(
+            parse_printed_path(Some("/music/Title [id].mp3\n")),
+            Some(PathBuf::from("/music/Title [id].mp3"))
+        );
+    }
+
+    #[test]
+    fn parse_printed_path_handles_spaces_and_brackets() {
+        assert_eq!(
+            parse_printed_path(Some("/music/My Song [dQw4w9WgXcQ].mp3\n")),
+            Some(PathBuf::from("/music/My Song [dQw4w9WgXcQ].mp3"))
+        );
+    }
+
+    #[test]
+    fn parse_printed_path_takes_first_non_empty_line() {
+        assert_eq!(
+            parse_printed_path(Some("\n\n/music/Title [id].mp3\n")),
+            Some(PathBuf::from("/music/Title [id].mp3"))
+        );
+    }
 }

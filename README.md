@@ -30,7 +30,7 @@ htb download -u "https://www.youtube.com/watch?v=VIDEO_ID" -d "music/rock"
 ### Download with Custom Filename
 
 ```bash
-htb download -u "https://www.youtube.com/watch?v=VIDEO_ID" -f "my_song.mp3"
+htb download -u "https://www.youtube.com/watch?v=VIDEO_ID" -f "my_song"
 ```
 
 ### Record Metadata Only

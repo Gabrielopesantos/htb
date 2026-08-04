@@ -88,7 +88,7 @@ impl Repository for SQLiteRepository {
         let mut stmt = self.conn.prepare(query)?;
 
         let rows = stmt.query_map(
-            &[(":directory", directory), (":directory", directory), (":tags", tags), (":tags", tags)],
+            &[(":directory", directory), (":tags", tags)],
             |row| {
                 // NOTE: Maybe have a `new` instead?
                 Ok(Media {
@@ -96,7 +96,7 @@ impl Repository for SQLiteRepository {
                     filename: row.get(1)?,
                     library: row.get(2)?,
                     url: row.get(3)?,
-                    tags: row.get(4)?,
+                    tags: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
                 })
             },
         )?;
