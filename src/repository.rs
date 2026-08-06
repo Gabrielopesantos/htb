@@ -1,4 +1,4 @@
-use crate::{cli::TagOverrides, config, error::Result, media::Media};
+use crate::{config, error::Result, media::Id3Tags, media::Media};
 use rusqlite::{params, Connection};
 
 const DB_FILE_NAME: &str = "catalog.db";
@@ -11,7 +11,7 @@ pub trait Repository {
     fn insert_into_media(&self, media: &Media) -> Result<()>;
     fn query(&self, directory: &str, tags: &str) -> Result<Vec<Media>>;
     fn find_by_url(&self, url: &str) -> Result<Vec<Media>>;
-    fn update_overrides(&self, url: &str, overrides: &TagOverrides) -> Result<usize>;
+    fn update_tags(&self, url: &str, tags: &Id3Tags) -> Result<usize>;
 }
 
 fn media_from_row(row: &rusqlite::Row) -> rusqlite::Result<Media> {
@@ -21,7 +21,7 @@ fn media_from_row(row: &rusqlite::Row) -> rusqlite::Result<Media> {
         library: row.get(2)?,
         url: row.get(3)?,
         tags: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
-        overrides: TagOverrides {
+        id3: Id3Tags {
             title: row.get(5)?,
             artist: row.get(6)?,
             album: row.get(7)?,
@@ -102,12 +102,12 @@ impl Repository for SQLiteRepository {
                 media.library,
                 media.url,
                 media.tags,
-                media.overrides.title,
-                media.overrides.artist,
-                media.overrides.album,
-                media.overrides.genre,
-                media.overrides.track,
-                media.overrides.year,
+                media.id3.title,
+                media.id3.artist,
+                media.id3.album,
+                media.id3.genre,
+                media.id3.track,
+                media.id3.year,
             ],
         )?;
         Ok(())
@@ -153,20 +153,20 @@ impl Repository for SQLiteRepository {
         Ok(catalog_items)
     }
 
-    fn update_overrides(&self, url: &str, overrides: &TagOverrides) -> Result<usize> {
-        // Writes all six columns, so the caller is responsible for merging the
-        // new values over the stored ones first (see `TagOverrides::overlay`).
+    fn update_tags(&self, url: &str, tags: &Id3Tags) -> Result<usize> {
+        // Writes all six columns, so the caller passes the full desired tag
+        // snapshot (see `Id3Tags::overlay`), not a partial update.
         let updated = self.conn.execute(
             "UPDATE media
              SET title = ?1, artist = ?2, album = ?3, genre = ?4, track = ?5, year = ?6
              WHERE url = ?7",
             params![
-                overrides.title,
-                overrides.artist,
-                overrides.album,
-                overrides.genre,
-                overrides.track,
-                overrides.year,
+                tags.title,
+                tags.artist,
+                tags.album,
+                tags.genre,
+                tags.track,
+                tags.year,
                 url,
             ],
         )?;
@@ -190,7 +190,7 @@ impl Repository for DummyRepository {
         Ok(vec![])
     }
 
-    fn update_overrides(&self, _url: &str, _overrides: &TagOverrides) -> Result<usize> {
+    fn update_tags(&self, _url: &str, _tags: &Id3Tags) -> Result<usize> {
         Ok(0)
     }
 }
@@ -203,20 +203,20 @@ mod tests {
         SQLiteRepository::from_connection(Connection::open_in_memory().unwrap()).unwrap()
     }
 
-    fn media(overrides: TagOverrides) -> Media {
+    fn media(tags: Id3Tags) -> Media {
         Media::builder()
             .name("Example Song")
             .filename("Example Song [aBcD1234xyz].mp3")
             .library("music/pop")
             .url("https://youtu.be/aBcD1234xyz")
             .tags("chill,instrumental")
-            .overrides(overrides)
+            .id3(tags)
             .build()
             .unwrap()
     }
 
-    fn all_overrides() -> TagOverrides {
-        TagOverrides {
+    fn all_tags() -> Id3Tags {
+        Id3Tags {
             title: Some("Example Song".into()),
             artist: Some("Example Artist".into()),
             album: Some("Example Album".into()),
@@ -227,9 +227,9 @@ mod tests {
     }
 
     #[test]
-    fn round_trips_all_overrides() {
+    fn round_trips_all_tags() {
         let repo = repo();
-        repo.insert_into_media(&media(all_overrides())).unwrap();
+        repo.insert_into_media(&media(all_tags())).unwrap();
 
         let rows = repo.query("", "").unwrap();
 
@@ -237,26 +237,25 @@ mod tests {
         assert_eq!(rows[0].name, "Example Song");
         assert_eq!(rows[0].library, "music/pop");
         assert_eq!(rows[0].tags, "chill,instrumental");
-        assert_eq!(rows[0].overrides, all_overrides());
+        assert_eq!(rows[0].id3, all_tags());
     }
 
     #[test]
-    fn round_trips_absent_overrides_as_none() {
+    fn round_trips_absent_tags_as_none() {
         let repo = repo();
-        repo.insert_into_media(&media(TagOverrides::default()))
-            .unwrap();
+        repo.insert_into_media(&media(Id3Tags::default())).unwrap();
 
         let rows = repo.query("", "").unwrap();
 
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].overrides, TagOverrides::default());
-        assert!(rows[0].overrides.is_empty());
+        assert_eq!(rows[0].id3, Id3Tags::default());
+        assert!(rows[0].id3.is_empty());
     }
 
     #[test]
     fn filters_by_directory_and_tags() {
         let repo = repo();
-        repo.insert_into_media(&media(all_overrides())).unwrap();
+        repo.insert_into_media(&media(all_tags())).unwrap();
 
         assert_eq!(repo.query("music/pop", "").unwrap().len(), 1);
         assert_eq!(repo.query("", "chill").unwrap().len(), 1);
@@ -267,12 +266,12 @@ mod tests {
     #[test]
     fn finds_by_url() {
         let repo = repo();
-        repo.insert_into_media(&media(all_overrides())).unwrap();
+        repo.insert_into_media(&media(all_tags())).unwrap();
 
         let found = repo.find_by_url("https://youtu.be/aBcD1234xyz").unwrap();
 
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].overrides, all_overrides());
+        assert_eq!(found[0].id3, all_tags());
         assert!(repo
             .find_by_url("https://youtu.be/nope")
             .unwrap()
@@ -280,38 +279,37 @@ mod tests {
     }
 
     #[test]
-    fn updates_overrides_by_url() {
+    fn updates_tags_by_url() {
         let repo = repo();
-        repo.insert_into_media(&media(TagOverrides::default()))
-            .unwrap();
+        repo.insert_into_media(&media(Id3Tags::default())).unwrap();
 
         let updated = repo
-            .update_overrides("https://youtu.be/aBcD1234xyz", &all_overrides())
+            .update_tags("https://youtu.be/aBcD1234xyz", &all_tags())
             .unwrap();
 
         assert_eq!(updated, 1);
         let found = repo.find_by_url("https://youtu.be/aBcD1234xyz").unwrap();
-        assert_eq!(found[0].overrides, all_overrides());
+        assert_eq!(found[0].id3, all_tags());
     }
 
     #[test]
     fn updating_an_unknown_url_changes_nothing() {
         let repo = repo();
-        repo.insert_into_media(&media(all_overrides())).unwrap();
+        repo.insert_into_media(&media(all_tags())).unwrap();
 
         let updated = repo
-            .update_overrides("https://youtu.be/nope", &TagOverrides::default())
+            .update_tags("https://youtu.be/nope", &Id3Tags::default())
             .unwrap();
 
         assert_eq!(updated, 0);
         let found = repo.find_by_url("https://youtu.be/aBcD1234xyz").unwrap();
-        assert_eq!(found[0].overrides, all_overrides());
+        assert_eq!(found[0].id3, all_tags());
     }
 
     #[test]
     fn apply_schema_is_idempotent() {
         let repo = repo();
-        repo.insert_into_media(&media(all_overrides())).unwrap();
+        repo.insert_into_media(&media(all_tags())).unwrap();
 
         repo.apply_schema().unwrap();
 

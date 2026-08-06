@@ -1,5 +1,5 @@
-use crate::cli::TagOverrides;
 use crate::error::Result;
+use crate::media::Id3Tags;
 use lofty::config::{ParseOptions, WriteOptions};
 use lofty::file::AudioFile;
 use lofty::id3::v2::{Frame, FrameId, Id3v2Tag, TimestampFrame};
@@ -10,15 +10,14 @@ use lofty::TextEncoding;
 use log::debug;
 use std::path::Path;
 
-/// Writes `overrides` over whatever tags are already on the file, leaving
-/// every field the caller did not set alone (including the cover art yt-dlp
-/// embedded).
-pub fn apply_overrides(path: &Path, overrides: &TagOverrides) -> Result<()> {
-    if overrides.is_empty() {
+/// Writes `tags` over whatever is already on the file, leaving every field
+/// not set alone (including the cover art yt-dlp embedded).
+pub fn write_tags(path: &Path, tags: &Id3Tags) -> Result<()> {
+    if tags.is_empty() {
         return Ok(());
     }
 
-    debug!("Applying tag overrides to {}", path.display());
+    debug!("Writing tags to {}", path.display());
 
     let mut file = std::fs::File::open(path)?;
     let mut mpeg = MpegFile::read_from(&mut file, ParseOptions::new().read_properties(false))?;
@@ -29,22 +28,22 @@ pub fn apply_overrides(path: &Path, overrides: &TagOverrides) -> Result<()> {
     }
     let tag = mpeg.id3v2_mut().expect("just inserted");
 
-    if let Some(title) = &overrides.title {
+    if let Some(title) = &tags.title {
         tag.set_title(title.clone()); // TIT2
     }
-    if let Some(artist) = &overrides.artist {
+    if let Some(artist) = &tags.artist {
         tag.set_artist(artist.clone()); // TPE1
     }
-    if let Some(album) = &overrides.album {
+    if let Some(album) = &tags.album {
         tag.set_album(album.clone()); // TALB
     }
-    if let Some(genre) = &overrides.genre {
+    if let Some(genre) = &tags.genre {
         tag.set_genre(genre.clone()); // TCON
     }
-    if let Some(track) = overrides.track {
+    if let Some(track) = tags.track {
         tag.set_track(track); // TRCK
     }
-    if let Some(year) = overrides.year {
+    if let Some(year) = tags.year {
         // The year needs a real `Frame::Timestamp`, inserted by hand.
         //
         // `Accessor` has no `set_year`, and `insert_text(ItemKey::Year, ..)`
@@ -71,4 +70,27 @@ pub fn apply_overrides(path: &Path, overrides: &TagOverrides) -> Result<()> {
     mpeg.save_to_path(path, WriteOptions::new().use_id3v23(true))?;
 
     Ok(())
+}
+
+/// Reads back the ID3v2 tags currently on `path`. No ID3v2 tag at all reads
+/// as all-`None`, not an error.
+pub fn read_tags(path: &Path) -> Result<Id3Tags> {
+    debug!("Reading tags from {}", path.display());
+
+    let mut file = std::fs::File::open(path)?;
+    let mpeg = MpegFile::read_from(&mut file, ParseOptions::new().read_properties(false))?;
+    drop(file);
+
+    let Some(tag) = mpeg.id3v2() else {
+        return Ok(Id3Tags::default());
+    };
+
+    Ok(Id3Tags {
+        title: tag.title().map(|s| s.into_owned()),
+        artist: tag.artist().map(|s| s.into_owned()),
+        album: tag.album().map(|s| s.into_owned()),
+        genre: tag.genre().map(|s| s.into_owned()),
+        track: tag.track(),
+        year: tag.date().map(|ts| ts.year),
+    })
 }

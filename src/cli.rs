@@ -109,20 +109,6 @@ impl TagOverrides {
             && self.year.is_none()
             && self.genre.is_none()
     }
-
-    /// Layers `updates` over `self`, field by field. Only the fields actually
-    /// given in `updates` change, so `htb tag --artist X` leaves an album set
-    /// earlier alone.
-    pub fn overlay(&self, updates: &TagOverrides) -> TagOverrides {
-        TagOverrides {
-            title: updates.title.clone().or_else(|| self.title.clone()),
-            artist: updates.artist.clone().or_else(|| self.artist.clone()),
-            album: updates.album.clone().or_else(|| self.album.clone()),
-            track: updates.track.or(self.track),
-            year: updates.year.or(self.year),
-            genre: updates.genre.clone().or_else(|| self.genre.clone()),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -166,38 +152,6 @@ mod tests {
         for overrides in set_each {
             assert!(!overrides.is_empty(), "{:?} should not be empty", overrides);
         }
-    }
-
-    fn stored() -> TagOverrides {
-        TagOverrides {
-            title: Some("Stored Title".into()),
-            artist: Some("Stored Artist".into()),
-            year: Some(2000),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn overlay_replaces_only_the_given_fields() {
-        let updates = TagOverrides {
-            artist: Some("New Artist".into()),
-            genre: Some("Pop".into()),
-            ..Default::default()
-        };
-
-        let merged = stored().overlay(&updates);
-
-        assert_eq!(merged.artist.as_deref(), Some("New Artist"));
-        assert_eq!(merged.genre.as_deref(), Some("Pop"));
-        // Untouched fields survive.
-        assert_eq!(merged.title.as_deref(), Some("Stored Title"));
-        assert_eq!(merged.year, Some(2000));
-        assert_eq!(merged.album, None);
-    }
-
-    #[test]
-    fn overlay_with_nothing_is_a_noop() {
-        assert_eq!(stored().overlay(&TagOverrides::default()), stored());
     }
 }
 

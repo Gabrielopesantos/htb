@@ -13,7 +13,7 @@ use cli::{Cli, Command, DownloadArgs, TagOverrides};
 use config::Config;
 use error::{HtbError, Result};
 use log::{debug, info, warn};
-use media::Media;
+use media::{Id3Tags, Media};
 use media_handler::{DownloadOutcome, MediaHandler, YtDlp};
 
 use std::path::{Path, PathBuf};
@@ -133,11 +133,21 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         })?;
 
         let name = title::clean(&media_metadata.title);
-        let overrides = effective_overrides(&arguments.overrides, &media_metadata.title, &name);
+        let title_override =
+            effective_overrides(&arguments.overrides, &media_metadata.title, &name);
+
+        // yt-dlp already embedded its own baseline tags (title, uploader as
+        // artist, etc.) during the download; read them back so the catalog
+        // ends up with the file's real tags, not just the CLI-supplied delta.
+        let base_tags = tagger::read_tags(&resolved_path)?;
+        let tags = base_tags.overlay(&title_override);
 
         // Tag before recording, so a tagging failure never leaves a catalog row
-        // claiming tags that were never written to the file.
-        tagger::apply_overrides(&resolved_path, &overrides)?;
+        // claiming tags that were never written to the file. Only rewrite the
+        // file when there is an actual delta to apply.
+        if !title_override.is_empty() {
+            tagger::write_tags(&resolved_path, &tags)?;
+        }
 
         if !arguments.no_record {
             let filename = resolved_path
@@ -150,7 +160,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
                     ))
                 })?;
 
-            let media = self.create_media(&name, filename, arguments, &overrides)?;
+            let media = self.create_media(&name, filename, arguments, &tags)?;
             debug!("Recording in catalog");
             self.repository.insert_into_media(&media)?;
             info!("Download completed and recorded: {}", media.name);
@@ -174,10 +184,13 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         })?;
 
         let name = title::clean(&media_metadata.title);
-        let overrides = effective_overrides(&args.overrides, &media_metadata.title, &name);
+        let title_override = effective_overrides(&args.overrides, &media_metadata.title, &name);
+        // No file exists yet, so there's nothing to read baseline tags from -
+        // this persists intent only. A later `diff` writes it to the file.
+        let tags = Id3Tags::default().overlay(&title_override);
 
         let filename = args.filename.as_deref().unwrap_or(&name);
-        let media = self.create_media(&name, filename, args, &overrides)?;
+        let media = self.create_media(&name, filename, args, &tags)?;
         self.repository.insert_into_media(&media)?;
         info!("Recorded in catalog: {}", media.name);
 
@@ -190,18 +203,18 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
         name: &str,
         filename: &str,
         args: &DownloadArgs,
-        overrides: &TagOverrides,
+        tags: &Id3Tags,
     ) -> Result<Media> {
         let directory = args.directory.as_ref().map_or("", |v| v);
-        let tags = args.tags.as_deref().unwrap_or_default();
+        let catalog_tags = args.tags.as_deref().unwrap_or_default();
 
         Media::builder()
             .name(name)
             .filename(filename)
             .library(directory)
             .url(&args.url)
-            .tags(tags)
-            .overrides(overrides.clone())
+            .tags(catalog_tags)
+            .id3(tags.clone())
             .build()
     }
 
@@ -250,8 +263,9 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
                 match outcome {
                     DownloadOutcome::Downloaded { path, .. } => {
                         // A re-download only produces yt-dlp's baseline tags,
-                        // so the catalog's overrides have to be re-applied.
-                        tagger::apply_overrides(&path, &media.overrides)?;
+                        // so the catalog's known tags are written back onto it.
+                        // The catalog row is already canonical - no DB update needed.
+                        tagger::write_tags(&path, &media.id3)?;
                         missing_count += 1;
                     }
                     DownloadOutcome::AlreadyDownloaded => warn!(
@@ -288,7 +302,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
             );
         }
 
-        let merged = first.overrides.overlay(&args.overrides);
+        let merged = first.id3.overlay(&args.overrides);
 
         // Write the files before the catalog, so a tagging failure never leaves
         // rows claiming tags that are not on disk.
@@ -300,7 +314,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
                 .join(&media.filename);
 
             if media_file_path.exists() {
-                tagger::apply_overrides(&media_file_path, &merged)?;
+                tagger::write_tags(&media_file_path, &merged)?;
             } else {
                 warn!(
                     "File not found, updating catalog only (run `htb diff` to restore it): {}",
@@ -309,7 +323,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
             }
         }
 
-        let updated = self.repository.update_overrides(&args.url, &merged)?;
+        let updated = self.repository.update_tags(&args.url, &merged)?;
         info!("Tags updated for {} catalog entrie(s)", updated);
 
         Ok(())
