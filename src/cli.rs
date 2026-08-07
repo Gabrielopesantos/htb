@@ -23,6 +23,8 @@ pub enum Command {
     Diff,
     #[command(about = "Update the ID3 tags of already-downloaded audio")]
     Tag(TagArgs),
+    #[command(about = "Print the current config")]
+    Config,
 }
 
 #[derive(Args)]

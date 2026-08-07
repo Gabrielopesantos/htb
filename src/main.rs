@@ -341,6 +341,12 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
 
         Ok(())
     }
+
+    fn print_config(&self) -> Result<()> {
+        println!("Path: {}", config::config_path()?.display());
+        println!("{}", serde_json::to_string_pretty(&self.config)?);
+        Ok(())
+    }
 }
 
 fn main() -> Result<()> {
@@ -379,6 +385,7 @@ fn run_command<T: MediaHandler, R: Repository>(api: Api<T, R>, command: Command)
         Command::List(args) => api.list_catalog(&args),
         Command::Diff => api.diff(),
         Command::Tag(args) => api.tag_media(&args),
+        Command::Config => api.print_config(),
     }
 }
 

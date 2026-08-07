@@ -20,12 +20,17 @@ fn default_catalog_path() -> Result<PathBuf> {
         .ok_or_else(|| HtbError::Config("Could not determine a default catalog path".to_string()))
 }
 
+// Path to the config file.
+pub fn config_path() -> Result<PathBuf> {
+    Ok(config_dir()
+        .ok_or_else(|| HtbError::Config("Could not get config directory".to_string()))?
+        .join("htb")
+        .join(CONFIG_FILE_NAME))
+}
+
 impl Config {
     pub fn new() -> Result<Self> {
-        let config_path = config_dir()
-            .ok_or_else(|| HtbError::Config("Could not get config directory".to_string()))?
-            .join("htb")
-            .join(CONFIG_FILE_NAME);
+        let config_path = config_path()?;
 
         let config = match create_if_not_exists(&config_path)? {
             Some(config) => config,
