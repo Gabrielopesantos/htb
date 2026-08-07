@@ -44,7 +44,7 @@ pub struct DownloadArgs {
     #[arg(
         short = 'd',
         long = "directory",
-        help = "Directory to save the audio, if not provided it will be saved in the root catalog (default)"
+        help = "Subdirectory of the catalog to save the audio in (e.g. for grouping into playlists); saved in the catalog root if not provided."
     )]
     pub directory: Option<String>,
 
@@ -164,14 +164,14 @@ pub struct ListArgs {
     #[arg(
         short = 'd',
         long = "directory",
-        help = "Only list entries in this directory"
+        help = "Only list entries in this catalog subdirectory."
     )]
     pub directory: Option<String>,
 
     #[arg(
         short = 't',
         long = "tags",
-        help = "Comma separated catalog labels to filter by. Unrelated to the ID3 genre."
+        help = "Comma separated catalog labels to filter by."
     )]
     pub tags: Option<String>,
 
