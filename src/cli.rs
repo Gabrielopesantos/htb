@@ -1,4 +1,6 @@
+use crate::list::{OutputFormat, SortKey};
 use clap::{Args, Parser, Subcommand};
+use serde::Serialize;
 
 #[derive(Parser)]
 #[command(author, version)]
@@ -74,7 +76,7 @@ pub struct DownloadArgs {
 ///
 /// `record` persists these but writes no file, since there is nothing on disk
 /// yet; `diff` applies them when it downloads the file.
-#[derive(Args, Debug, Default, Clone, PartialEq)]
+#[derive(Args, Debug, Default, Clone, PartialEq, Serialize)]
 pub struct TagOverrides {
     #[arg(long = "title", help = "ID3 title (TIT2)")]
     pub title: Option<String>,
@@ -157,9 +159,45 @@ mod tests {
 
 #[derive(Args)]
 pub struct ListArgs {
-    #[arg(short = 'd', long = "directory")]
+    #[arg(
+        short = 'd',
+        long = "directory",
+        help = "Only list entries in this directory"
+    )]
     pub directory: Option<String>,
 
-    #[arg(short = 't', long = "tags", help = "Comma separated key values")]
+    #[arg(
+        short = 't',
+        long = "tags",
+        help = "Comma separated catalog labels to filter by. Unrelated to the ID3 genre."
+    )]
     pub tags: Option<String>,
+
+    #[arg(
+        short = 'l',
+        long = "long",
+        help = "Show every column, including track, year, genre, filename, URL and added date"
+    )]
+    pub long: bool,
+
+    #[arg(
+        long = "sort",
+        value_enum,
+        default_value_t = SortKey::Library,
+        help = "Column to sort by"
+    )]
+    pub sort: SortKey,
+
+    #[arg(short = 'r', long = "reverse", help = "Reverse the sort order")]
+    pub reverse: bool,
+
+    // Long-only: `-f` is `--filename` on `download`/`record`, so reusing it here
+    // would be a confusing.
+    #[arg(
+        long = "format",
+        value_enum,
+        default_value_t = OutputFormat::Table,
+        help = "Output format"
+    )]
+    pub format: OutputFormat,
 }

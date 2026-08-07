@@ -1,6 +1,7 @@
 mod cli;
 mod config;
 mod error;
+mod list;
 mod media;
 mod media_handler;
 mod progress;
@@ -16,6 +17,7 @@ use log::{debug, info, warn};
 use media::{Id3Tags, Media};
 use media_handler::{DownloadOutcome, MediaHandler, YtDlp};
 
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use crate::repository::Repository;
@@ -218,25 +220,36 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
             .build()
     }
 
-    fn list_catalog(&self, args: cli::ListArgs) -> Result<()> {
+    fn list_catalog(&self, args: &cli::ListArgs) -> Result<()> {
         info!(
             "Querying catalog with filters - directory: {:?}, tags: {:?}",
             args.directory, args.tags
         );
-        let catalog_items = self.repository.query(
+        let mut catalog_items = self.repository.query(
             args.directory.as_deref().unwrap_or(""),
             args.tags.as_deref().unwrap_or(""),
         )?;
-        if !catalog_items.is_empty() {
-            info!("Found {} items", catalog_items.len());
-            for item in catalog_items {
-                println!("{}", item);
-            }
-        } else {
-            println!("No items to list");
+
+        if catalog_items.is_empty() {
+            // On stderr, so a piped `htb list` yields rows or nothing at all.
+            eprintln!("No items to list");
+            return Ok(());
         }
 
-        Ok(())
+        info!("Found {} items", catalog_items.len());
+        list::sort(&mut catalog_items, args.sort, args.reverse);
+
+        let stdout = io::stdout();
+        let mut out = BufWriter::new(stdout.lock());
+        let written = list::render(&catalog_items, args.format, args.long, &mut out)
+            .and_then(|()| out.flush());
+
+        // `htb list | head` closes the pipe early; that is a normal way to stop
+        // reading, not a failure.
+        match written {
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+            other => Ok(other?),
+        }
     }
 
     fn diff(&self) -> Result<()> {
@@ -363,7 +376,7 @@ fn run_command<T: MediaHandler, R: Repository>(api: Api<T, R>, command: Command)
     match command {
         Command::Download(args) => api.download_media(&args),
         Command::Record(args) => api.record_media(&args),
-        Command::List(args) => api.list_catalog(args),
+        Command::List(args) => api.list_catalog(&args),
         Command::Diff => api.diff(),
         Command::Tag(args) => api.tag_media(&args),
     }

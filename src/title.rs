@@ -35,6 +35,7 @@ fn is_noise(inner: &str) -> bool {
             | "8k"
             | "1080p"
             | "720p"
+            | "full"
     )
 }
 
@@ -99,6 +100,7 @@ mod tests {
             ("Some Song (Lyric Video)", "Some Song"),
             ("Some Song (HD)", "Some Song"),
             ("Some Song | Official Video", "Some Song"),
+            ("Some Song (Full)", "Some Song"),
         ];
 
         for (input, expected) in cases {

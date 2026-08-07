@@ -77,17 +77,42 @@ htb record -u "https://www.youtube.com/watch?v=<VIDEO_ID>"
 
 ### List Catalog
 
-List all audio in your catalog:
+List all audio in your catalog, as an aligned table sorted by directory then name:
 
 ```bash
 htb list
 ```
 
-List audio in a specific directory:
+Filter by directory, or by catalog labels (`-t` matches the labels set with `--tags`, not the ID3 genre):
 
 ```bash
-htb list -d "music"
+htb list -d "<DIRECTORY PATH>"
+htb list -t "<TAG>"
 ```
+
+Show every column - track, year, genre, filename, URL and the date the entry was added:
+
+```bash
+htb list --long
+```
+
+Sort by `name`, `artist`, `album`, `library` (default) or `added`, optionally reversed. Entries missing the
+sort key are always listed last:
+
+```bash
+htb list --sort added --reverse   # most recently added first
+```
+
+For scripting, `--format tsv` prints the same columns without a header or padding, and `--format json`
+prints every field regardless of `--long`:
+
+```bash
+htb list --format tsv | cut -f1
+htb list --format json | jq -r '.[] | select(.artist == null) | .name'
+```
+
+Only the rows go to stdout; counts, warnings and the "No items to list" message go to stderr, so piping
+stays clean.
 
 ### Download Missing Files
 

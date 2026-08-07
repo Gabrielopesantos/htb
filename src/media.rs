@@ -1,12 +1,12 @@
 use crate::cli::TagOverrides;
 use crate::error::{HtbError, Result};
-use std::fmt;
+use serde::Serialize;
 
 /// A full ID3 tag snapshot - either what was read off a file or what should
 /// be written to one. Unlike `TagOverrides` (a CLI-supplied delta), every
 /// field here represents the tag's actual current value, or `None` because
 /// the tag genuinely has none.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct Id3Tags {
     pub title: Option<String>,
     pub artist: Option<String>,
@@ -42,14 +42,16 @@ impl Id3Tags {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Media {
     pub name: String,
     pub filename: String,
     pub library: String,
     pub url: String,
     pub tags: String,
+    #[serde(flatten)]
     pub id3: Id3Tags,
+    pub inserted_at: Option<String>,
 }
 
 impl Media {
@@ -111,13 +113,8 @@ impl MediaBuilder {
             url: self.url.ok_or(HtbError::Builder { field: "url" })?,
             tags: self.tags.unwrap_or_default(),
             id3: self.id3.unwrap_or_default(),
+            inserted_at: None,
         })
-    }
-}
-
-impl fmt::Display for Media {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}\t{}\t{}", self.name, self.library, self.filename)
     }
 }
 
@@ -127,8 +124,8 @@ mod tests {
 
     fn stored() -> Id3Tags {
         Id3Tags {
-            title: Some("Stored Title".into()),
-            artist: Some("Stored Artist".into()),
+            title: Some("Song 1".into()),
+            artist: Some("Artist 1".into()),
             year: Some(2000),
             ..Default::default()
         }
@@ -137,17 +134,17 @@ mod tests {
     #[test]
     fn overlay_replaces_only_the_given_fields() {
         let updates = TagOverrides {
-            artist: Some("New Artist".into()),
-            genre: Some("Pop".into()),
+            artist: Some("Artist 2".into()),
+            genre: Some("Genre 2".into()),
             ..Default::default()
         };
 
         let merged = stored().overlay(&updates);
 
-        assert_eq!(merged.artist.as_deref(), Some("New Artist"));
-        assert_eq!(merged.genre.as_deref(), Some("Pop"));
+        assert_eq!(merged.artist.as_deref(), Some("Artist 2"));
+        assert_eq!(merged.genre.as_deref(), Some("Genre 2"));
         // Untouched fields survive.
-        assert_eq!(merged.title.as_deref(), Some("Stored Title"));
+        assert_eq!(merged.title.as_deref(), Some("Song 1"));
         assert_eq!(merged.year, Some(2000));
         assert_eq!(merged.album, None);
     }
@@ -165,7 +162,7 @@ mod tests {
     #[test]
     fn not_empty_when_any_field_is_set() {
         let tags = Id3Tags {
-            artist: Some("a".into()),
+            artist: Some("Artist 1".into()),
             ..Default::default()
         };
 

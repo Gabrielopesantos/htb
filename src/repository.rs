@@ -5,7 +5,7 @@ const DB_FILE_NAME: &str = "catalog.db";
 
 /// Columns every read selects, in the order `media_from_row` expects.
 const MEDIA_COLUMNS: &str =
-    "name, filename, directory, url, tags, title, artist, album, genre, track, year";
+    "name, filename, directory, url, tags, title, artist, album, genre, track, year, inserted_at";
 
 pub trait Repository {
     fn insert_into_media(&self, media: &Media) -> Result<()>;
@@ -29,6 +29,7 @@ fn media_from_row(row: &rusqlite::Row) -> rusqlite::Result<Media> {
             track: row.get(9)?,
             year: row.get(10)?,
         },
+        inserted_at: row.get(11)?,
     })
 }
 
@@ -205,8 +206,8 @@ mod tests {
 
     fn media(tags: Id3Tags) -> Media {
         Media::builder()
-            .name("Example Song")
-            .filename("Example Song [aBcD1234xyz].mp3")
+            .name("Song 1")
+            .filename("Song 1 [aBcD1234xyz].mp3")
             .library("music/pop")
             .url("https://youtu.be/aBcD1234xyz")
             .tags("chill,instrumental")
@@ -217,12 +218,12 @@ mod tests {
 
     fn all_tags() -> Id3Tags {
         Id3Tags {
-            title: Some("Example Song".into()),
-            artist: Some("Example Artist".into()),
-            album: Some("Example Album".into()),
+            title: Some("Song 1".into()),
+            artist: Some("Artist 1".into()),
+            album: Some("Album 1".into()),
             track: Some(1),
             year: Some(2001),
-            genre: Some("Ambient".into()),
+            genre: Some("Genre 1".into()),
         }
     }
 
@@ -234,10 +235,11 @@ mod tests {
         let rows = repo.query("", "").unwrap();
 
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].name, "Example Song");
+        assert_eq!(rows[0].name, "Song 1");
         assert_eq!(rows[0].library, "music/pop");
         assert_eq!(rows[0].tags, "chill,instrumental");
         assert_eq!(rows[0].id3, all_tags());
+        assert!(rows[0].inserted_at.is_some());
     }
 
     #[test]
