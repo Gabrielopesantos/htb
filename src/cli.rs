@@ -1,12 +1,20 @@
 use crate::list::{OutputFormat, SortKey};
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(author, version)]
 #[command(about = "Download and keep track of audio content")]
 #[command(arg_required_else_help = true)]
 pub struct Cli {
+    #[arg(
+        long = "config",
+        global = true,
+        help = "Path to the config file, overriding the default OS config directory (env: HTB_CONFIG)"
+    )]
+    pub config: Option<PathBuf>,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }

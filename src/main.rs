@@ -343,7 +343,7 @@ impl<T: MediaHandler, R: Repository> Api<T, R> {
     }
 
     fn print_config(&self) -> Result<()> {
-        println!("Path: {}", config::config_path()?.display());
+        println!("Path: {}", self.config.path.display());
         println!("{}", serde_json::to_string_pretty(&self.config)?);
         Ok(())
     }
@@ -353,15 +353,18 @@ fn main() -> Result<()> {
     // Init logger
     env_logger::init();
 
-    // Read config
-    let config = config::Config::new()
-        .map_err(|e| HtbError::Config(format!("Error reading config: {}", e)))?;
-    debug!("{:?}", config);
-
-    // Parse command once
-    let command = Cli::parse()
+    // Parse CLI once, ahead of config loading, since --config can override
+    // where the config is read from
+    let cli = Cli::parse();
+    let command = cli
         .command
         .ok_or_else(|| HtbError::Other("command is required".to_string()))?;
+
+    // Read config
+    let config_path = config::resolve_path(cli.config)?;
+    let config = config::Config::from_path(config_path)
+        .map_err(|e| HtbError::Config(format!("Error reading config file: {}", e)))?;
+    debug!("{:?}", config);
 
     // Branch on repository type and create different Api instances
     if config.no_record {

@@ -124,7 +124,7 @@ htb diff
 
 ## Configuration
 
-htb uses a JSON configuration file located at `~/.config/htb/config.json`. The configuration includes:
+htb uses a JSON configuration file located at `~/.config/htb/config.json` by default. The configuration includes:
 
 - `catalog_path`: Directory where audio files and the catalog database are stored (default: `~/Music/htb` with fallback to `~/htb`)
 - `no_record`: If `true`, disables catalog recording (default: `false`)
@@ -141,6 +141,16 @@ Example configuration:
 ```
 
 If the config file doesn't exist, it will be created with default values on first run.
+
+Run `htb config` to print the path htb is using along with its current contents.
+
+### Overriding the config location
+
+The config file path can be overridden, in order of precedence:
+
+1. `--config <PATH>` flag
+2. `HTB_CONFIG` environment variable
+3. default OS config directory (`~/.config/htb/config.json` on Linux)
 
 ## Dependencies
 
